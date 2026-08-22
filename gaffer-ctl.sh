@@ -78,7 +78,24 @@ json.dump(d, open(p, "w"), indent=2)
 PY
     ;;
   stop)
-    pkill -f "gafferd.py daemon" >/dev/null 2>&1 || true
+    # Kill the recorded pid, not a pattern. `pkill -f "gafferd.py daemon"`
+    # matches any process whose whole command line contains that text —
+    # including the shell that invoked this script, if the phrase happens to
+    # appear in it. The engine writes its own pid to a lock file precisely so
+    # this can be exact.
+    lock="${XDG_STATE_HOME:-$HOME/.local/state}/gaffer/gafferd.lock"
+    pid=$(cat "$lock" 2>/dev/null || true)
+    if [[ $pid =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+      # Make sure it really is ours before signalling it.
+      if tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q "gafferd.py"; then
+        kill "$pid" 2>/dev/null || true
+        echo "Stopped the engine (pid $pid)."
+      else
+        echo "Lock file points at pid $pid, which is not the engine — leaving it alone." >&2
+      fi
+    else
+      echo "The engine does not appear to be running."
+    fi
     ;;
   clear-cache)
     # Cached responses accumulate slowly across a season — mostly one small
