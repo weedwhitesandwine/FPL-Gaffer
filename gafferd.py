@@ -1096,8 +1096,11 @@ def raise_notices(state, previous, settings):
                 side = goals.get("home" if fx["hs"] != old["hs"] else "away") or []
                 if side:
                     scorer = side[-1]["name"]
+                # The same clock the app shows: 45+3' rather than a 48th
+                # minute that nobody watching the match would recognise.
+                when = fx.get("clock") or "%d'" % (fx.get("minutes") or 0)
                 notify("⚽ %s" % fx["label"],
-                       (scorer + " · " if scorer else "") + "%d'" % (fx.get("minutes") or 0))
+                       (scorer + " · " if scorer else "") + when)
             elif old.get("finished") is False and fx.get("finished"):
                 notify("Full time — %s" % fx["label"], "")
 
