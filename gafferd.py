@@ -162,11 +162,24 @@ def notify(title, body, urgency="normal", icon="applications-games"):
 
 # ----------------------------------------------------------------- transport
 
+# A hand-driven refresh means somebody is looking at the screen wanting newer
+# numbers than the ones on it. Honouring the background timers there makes the
+# button a lie: press it ten seconds after a cycle and it re-reads the cache and
+# changes nothing. So a manual pass ignores the timers on the handful of feeds
+# that carry the match clock and your own score — but only those, and only down
+# to a few seconds, so leaning on the key cannot turn into a flood.
+MANUAL = False
+MANUAL_KINDS = ("fixtures", "live", "status", "entry", "picks")
+MANUAL_TTL = 5
+
+
 def fetch(path, kind, live, force=False):
     """GET an API path, going through a small on-disk cache."""
     slug = path.strip("/").replace("/", "_").replace("?", "_").replace("=", "-")
     cache_path = os.path.join(CACHE_DIR, slug + ".json")
     ttl = TTL.get(kind, (300, 900))[0 if live else 1]
+    if MANUAL and kind in MANUAL_KINDS:
+        ttl = min(ttl, MANUAL_TTL)
 
     if not force and os.path.exists(cache_path):
         age = time.time() - os.path.getmtime(cache_path)
@@ -231,6 +244,142 @@ def pulse_fetch(path, ttl):
     return data
 
 
+def pulse_index():
+    """(home club, away club) -> Premier League fixture id.
+
+    Both feeds carry the league's own club numbering — the fantasy one calls
+    it `pulse_id` — so the two can be joined exactly. Joining on club names
+    cannot work: one feed says Man Utd where the other says Manchester
+    United, and seven of the twenty clubs disagree in that way.
+    """
+    seasons = pulse_fetch("/competitions/1/compseasons", 86400)
+    if not seasons or not seasons.get("content"):
+        return {}
+    season_id = int(seasons["content"][0]["id"])
+
+    listing = pulse_fetch(
+        "/fixtures?comps=1&compSeasons=%d&pageSize=100&sort=asc" % season_id, 21600)
+    if not listing:
+        return {}
+
+    index = {}
+    for f in listing.get("content") or []:
+        sides = f.get("teams") or []
+        if len(sides) != 2:
+            continue
+        try:
+            index[(int(sides[0]["team"]["id"]), int(sides[1]["team"]["id"]))] = int(f["id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return index
+
+
+# A booking is one event type carrying its colour in the description: a
+# second yellow arrives as YR, which is a sending off however it was earned.
+PL_CARDS = {"Y": "yellow_cards", "YR": "red_cards", "R": "red_cards"}
+PL_GOALS = {"G": "goals_scored", "P": "goals_scored", "O": "own_goals"}
+
+
+def pulse_match(fx, index):
+    """One live match as the league itself sees it: clock, score, events.
+
+    The fantasy feed runs two to four minutes behind the match and publishes
+    bookings late or not at all, so anything that is simply a fact about the
+    football is taken from the Premier League instead. Points, bonus, prices
+    and ownership stay with the fantasy game, which is the only feed that
+    has them.
+    """
+    pl_id = index.get((fx.get("_home_pulse"), fx.get("_away_pulse")))
+    if not pl_id:
+        return None
+    detail = pulse_fetch("/fixtures/%d" % pl_id, 20)
+    if not detail:
+        return None
+    sides = detail.get("teams") or []
+    if len(sides) != 2:
+        return None
+    home_id = int(sides[0]["team"]["id"])
+
+    # Events name a person, not a fantasy player, so the two team sheets in
+    # the same document are what turns an id back into a surname.
+    names = {}
+    for sheet in detail.get("teamLists") or []:
+        for person in (sheet.get("lineup") or []) + (sheet.get("substitutes") or []):
+            name = person.get("name") or {}
+            names[person.get("id")] = name.get("last") or name.get("display") or ""
+
+    buckets = {}
+    for ev in detail.get("events") or []:
+        kind = ev.get("type")
+        if kind == "B":
+            identifier = PL_CARDS.get(ev.get("description") or "", "yellow_cards")
+        else:
+            identifier = PL_GOALS.get(kind)
+        if not identifier:
+            continue
+        who = names.get(ev.get("personId"))
+        if not who:
+            continue
+        side = "home" if int(ev.get("teamId") or 0) == home_id else "away"
+        tally = buckets.setdefault(identifier, {"home": {}, "away": {}})
+        tally[side][who] = tally[side].get(who, 0) + 1
+
+    def score(entry):
+        value = entry.get("score")
+        return int(value) if value is not None else None
+
+    return {
+        "minutes": int((detail.get("clock") or {}).get("secs") or 0) // 60,
+        # The league writes the clock the way a broadcaster does — "45+3'00"
+        # through first-half stoppage — which seconds-divided-by-sixty turns
+        # into a meaningless 48th minute. Keep the label it actually used.
+        "clock": ((detail.get("clock") or {}).get("label") or "").split("'")[0],
+        "phase": detail.get("phase"),
+        "hs": score(sides[0]),
+        "as": score(sides[1]),
+        "events": {
+            identifier: {side: [{"name": n, "count": c} for n, c in rows.items()]
+                         for side, rows in tally.items()}
+            for identifier, tally in buckets.items()
+        },
+    }
+
+
+def apply_live_feed(fixtures, teams):
+    """Let the league's own feed correct the fantasy one, in place.
+
+    Only matches actually in play are looked up: a finished match is settled
+    and a match not yet kicked off has nothing to say. Everything downstream
+    — the scoreline in the label, the bar readout, the goal notifications —
+    then reads the corrected numbers without knowing where they came from.
+    """
+    playing = [f for f in fixtures
+               if f.get("started") and not f.get("finished_provisional")]
+    if not playing:
+        return
+    index = pulse_index()
+    if not index:
+        return
+    for fx in playing:
+        fx["_home_pulse"] = teams.get(fx["team_h"], {}).get("pulse_id")
+        fx["_away_pulse"] = teams.get(fx["team_a"], {}).get("pulse_id")
+        pl = pulse_match(fx, index)
+        if not pl:
+            continue
+        if pl["minutes"]:
+            fx["minutes"] = pl["minutes"]
+        if pl["hs"] is not None:
+            fx["team_h_score"] = pl["hs"]
+        if pl["as"] is not None:
+            fx["team_a_score"] = pl["as"]
+        fx["_pl_events"] = pl["events"]
+        # Half time is not a minute of football, it is a fifteen-minute break
+        # with the clock stopped on however much stoppage the first half ran
+        # to. Showing a number there invents play that is not happening.
+        fx["_pl_clock"] = "HT" if pl.get("phase") == "H" else (
+            pl["clock"] + "'" if pl.get("clock") else None)
+
+
 def referee_records(all_fixtures):
     """Cards shown by each referee, for the matches that have been played.
 
@@ -238,24 +387,9 @@ def referee_records(all_fixtures):
     fantasy feed we already have. A finished match never changes, so each
     referee is looked up once and remembered.
     """
-    seasons = pulse_fetch("/competitions/1/compseasons", 86400)
-    if not seasons or not seasons.get("content"):
+    by_teams = pulse_index()
+    if not by_teams:
         return []
-    season_id = int(seasons["content"][0]["id"])
-
-    listing = pulse_fetch(
-        "/fixtures?comps=1&compSeasons=%d&pageSize=100&sort=asc" % season_id, 21600)
-    if not listing:
-        return []
-
-    # Match the two feeds on club names, which both take from the same source.
-    by_teams = {}
-    for f in listing.get("content") or []:
-        sides = f.get("teams") or []
-        if len(sides) != 2:
-            continue
-        key = (sides[0]["team"]["name"], sides[1]["team"]["name"])
-        by_teams[key] = int(f["id"])
 
     known = read_json(os.path.join(CACHE_DIR, "referees.json"), {}) or {}
     records = {}
@@ -263,7 +397,7 @@ def referee_records(all_fixtures):
     for fx in all_fixtures:
         if not fx.get("finished_provisional"):
             continue
-        pulse_id = by_teams.get((fx.get("_home_name"), fx.get("_away_name")))
+        pulse_id = by_teams.get((fx.get("_home_pulse"), fx.get("_away_pulse")))
         if not pulse_id:
             continue
 
@@ -546,6 +680,8 @@ def label_fixtures(fixtures, teams):
         fx["_away"] = away
         fx["_home_name"] = teams.get(fx["team_h"], {}).get("name", home)
         fx["_away_name"] = teams.get(fx["team_a"], {}).get("name", away)
+        fx["_home_pulse"] = teams.get(fx["team_h"], {}).get("pulse_id")
+        fx["_away_pulse"] = teams.get(fx["team_a"], {}).get("pulse_id")
     return fixtures
 
 
@@ -601,6 +737,10 @@ def match_detail(fx, players):
     for identifier in ("goals_scored", "assists", "own_goals",
                        "yellow_cards", "red_cards", "bonus", "penalties_missed"):
         detail[identifier] = {"home": side(identifier, "h"), "away": side(identifier, "a")}
+    # Where the league has reported an event itself, its version replaces the
+    # fantasy one wholesale rather than being added to it — the two describe
+    # the same events, and the league gets there first.
+    detail.update(fx.get("_pl_events") or {})
     return detail
 
 
@@ -1036,6 +1176,15 @@ def refresh(settings, previous):
     if live_now:  # go back for genuinely fresh copies
         all_fixtures = label_fixtures(fetch("/fixtures/", "fixtures", True, force=True) or [], teams)
 
+    # The league's own feed is quicker and more complete than the fantasy one
+    # on the football itself. It is a second source though, so it corrects
+    # what it can and must never be able to take the refresh down with it.
+    try:
+        apply_live_feed(all_fixtures, teams)
+        all_fixtures = label_fixtures(all_fixtures, teams)
+    except Exception as exc:
+        log("live feed unavailable, using the fantasy clock: %s" % exc)
+
     gw_fixtures = [f for f in all_fixtures if f.get("event") == gw]
     live_raw = fetch("/event/%d/live/" % gw, "live", live_now) or {}
     live_stats = {e["id"]: e["stats"] for e in live_raw.get("elements", [])}
@@ -1127,7 +1276,8 @@ def refresh(settings, previous):
         "id": f["id"], "label": f["_label"], "home": f["_home"], "away": f["_away"],
         "home_name": f["_home_name"], "away_name": f["_away_name"],
         "started": f.get("started", False), "finished": f.get("finished_provisional", False),
-        "minutes": f.get("minutes", 0), "kickoff": f.get("kickoff_time"),
+        "minutes": f.get("minutes", 0), "clock": f.get("_pl_clock"),
+        "kickoff": f.get("kickoff_time"),
         "hs": f.get("team_h_score"), "as": f.get("team_a_score"),
         "hd": f.get("team_h_difficulty"), "ad": f.get("team_a_difficulty"),
         "detail": match_detail(f, players) if f.get("started") else None,
@@ -1261,20 +1411,36 @@ def write_bar(state):
     write_atomic(BAR_FILE, bar)
 
 
-def cadence(state):
+def cadence(state, ok=True):
     """How long to wait before looking again."""
+    # A cycle that fetched nothing tells us nothing, so the state we are
+    # holding is however stale it was before. Deciding the next sleep from it
+    # is how a blink of bad network turns into a quarter of an hour asleep:
+    # come back soon instead and ask again.
+    if not ok:
+        return 60
     if not state:
         return 120
+    wait = 900       # nothing on: check in occasionally, for news and prices
     if state.get("live_now"):
-        return 55
-    left = state.get("deadline_in")
-    if left is not None:
-        if left < 3600:
-            return 120       # deadline imminent — watch prices and news closely
-        if left < 6 * 3600:
-            return 300
-    # Nothing on: check in occasionally, mostly for injury news and prices.
-    return 900
+        wait = 55
+    else:
+        left = state.get("deadline_in")
+        if left is not None:
+            if left < 3600:
+                wait = 120   # deadline imminent — watch prices and news closely
+            elif left < 6 * 3600:
+                wait = 300
+    # Never sleep through a kick-off. Left alone, the sleep is chosen from a
+    # world where no match is on, so a game starting mid-nap goes unseen until
+    # the nap ends — the first goal of the evening landing in silence. Wake as
+    # the whistle goes instead, and let the next pass pick up the live cadence.
+    kick = parse_ts(state.get("next_kickoff"))
+    if kick:
+        until = (kick - now()).total_seconds() + 5
+        if 0 < until < wait:
+            wait = until
+    return max(20, wait)
 
 
 # ----------------------------------------------------------------------- main
@@ -1296,17 +1462,17 @@ def cycle(previous):
     if mode == "gaffer" and not settings.get("entryId"):
         write_atomic(STATE_FILE, {"needs_setup": True, "mode": mode,
                                   "updated": now().isoformat()})
-        return None
+        return None, True
     state = refresh(settings, previous)
     if not state:
-        return previous
+        return previous, False
     write_atomic(STATE_FILE, state)
     write_bar(state)
     try:
         raise_notices(state, previous, settings)
     except Exception as exc:                                    # never die on a toast
         log("notify pass failed: %s" % exc)
-    return state
+    return state, True
 
 
 def main():
@@ -1322,6 +1488,8 @@ def main():
         return
 
     if mode == "once":
+        global MANUAL
+        MANUAL = True
         cycle(read_json(STATE_FILE))
         return
 
@@ -1333,11 +1501,12 @@ def main():
     log("gafferd started")
     state = read_json(STATE_FILE)
     while True:
+        ok = False
         try:
-            state = cycle(state)
+            state, ok = cycle(state)
         except Exception as exc:
             log("cycle failed: %s" % exc)
-        time.sleep(cadence(state))
+        time.sleep(cadence(state, ok))
 
 
 if __name__ == "__main__":

@@ -223,8 +223,11 @@ Item {
               Text {
                 id: clockText
                 anchors.centerIn: parent
+                // The league's own clock where we have it — it knows about
+                // stoppage time and about the interval; the fantasy feed's
+                // bare minute count knows about neither.
                 text: card.fx.finished ? "FT"
-                     : card.fx.started ? (card.fx.minutes || 0) + "'"
+                     : card.fx.started ? (card.fx.clock || (card.fx.minutes || 0) + "'")
                      : Fmt.kickoff(card.fx.kickoff)
                 color: card.inPlay ? (app ? app.accent : "#fff") : (app ? app.dim : "#aaa")
                 font.family: app ? app.fontFamily : "monospace"

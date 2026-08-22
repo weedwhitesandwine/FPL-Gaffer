@@ -308,6 +308,7 @@ Item {
 
   // ------------------------------------------------------------ data feeds
   FileView {
+    id: stateFile
     path: root.stateDir + "/state.json"
     printErrors: false
     watchChanges: true
@@ -318,6 +319,19 @@ Item {
       } catch (e) {}
     }
     onFileChanged: reload()
+  }
+
+  // The engine replaces state.json by renaming a new file over the old one, so
+  // the file the watcher is holding is not the file that just changed. Watching
+  // is still worth having when it fires, but it cannot be the only way the
+  // numbers arrive: while the overlay is up, read the file on a tick as well,
+  // so a live score never sits stale behind a watcher that stopped listening.
+  Timer {
+    interval: 3000
+    running: root.opened
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: stateFile.reload()
   }
 
   FileView {
@@ -385,6 +399,9 @@ Item {
   Process {
     id: refreshProc
     command: ["python3", root.pluginDir + "/gafferd.py", "once"]
+    // Running the engine is only half a refresh: it writes the file, and
+    // nothing has told the overlay to read it back.
+    onExited: stateFile.reload()
   }
 
   Timer {
