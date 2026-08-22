@@ -16,6 +16,7 @@ Item {
 
   readonly property var st: app && app.state ? app.state : ({})
   readonly property string q: app ? app.filterText : ""
+  readonly property bool statto: app ? app.statto : false
 
   readonly property var rows: {
     var out = []
@@ -343,11 +344,16 @@ Item {
           }
         }
 
-        // --------------------------------------------------- the bonus race
+        // ------------------------------------- the bonus race, or the referee
+        // Bonus points are a fantasy scoring mechanic — "6 bps" means nothing
+        // to somebody who just watches the football. Fan mode gets the man in
+        // the middle in that slot instead, which is a fact about the match
+        // rather than a fact about the game played on top of it.
         Item {
           width: parent.width
           height: visible ? raceCol.implicitHeight + Style.spacing.sm : 0
-          visible: card.modelData.race !== null && card.modelData.race !== undefined
+          visible: tab.statto ? !!card.fx.referee
+                              : (card.modelData.race !== null && card.modelData.race !== undefined)
 
           Rectangle {
             anchors.top: parent.top
@@ -364,14 +370,22 @@ Item {
             spacing: Style.space(2)
 
             Text {
-              text: "Bonus race"
+              text: tab.statto ? "Referee" : "Bonus race"
               color: app ? app.fainter : "#888"
               font.family: app ? app.fontFamily : "monospace"
               font.pixelSize: Style.font.caption
             }
 
+            Text {
+              visible: tab.statto
+              text: card.fx.referee || ""
+              color: app ? app.foreground : "#fff"
+              font.family: app ? app.fontFamily : "monospace"
+              font.pixelSize: Style.font.bodySmall
+            }
+
             Repeater {
-              model: card.modelData.race ? card.modelData.race.rows : []
+              model: (!tab.statto && card.modelData.race) ? card.modelData.race.rows : []
               delegate: Row {
                 required property var modelData
                 spacing: Style.spacing.md

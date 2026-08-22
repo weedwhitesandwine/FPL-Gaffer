@@ -328,7 +328,11 @@ def pulse_match(fx, index):
         value = entry.get("score")
         return int(value) if value is not None else None
 
+    officials = detail.get("matchOfficials") or []
+    main = next((o for o in officials if o.get("role") == "MAIN"), None)
+
     return {
+        "referee": ((main or {}).get("name") or {}).get("display") or None,
         "minutes": int((detail.get("clock") or {}).get("secs") or 0) // 60,
         # The league writes the clock the way a broadcaster does — "45+3'00"
         # through first-half stoppage — which seconds-divided-by-sixty turns
@@ -376,6 +380,7 @@ def apply_live_feed(fixtures, teams):
         # Half time is not a minute of football, it is a fifteen-minute break
         # with the clock stopped on however much stoppage the first half ran
         # to. Showing a number there invents play that is not happening.
+        fx["_referee"] = pl.get("referee")
         fx["_pl_clock"] = "HT" if pl.get("phase") == "H" else (
             pl["clock"] + "'" if pl.get("clock") else None)
 
@@ -1277,6 +1282,7 @@ def refresh(settings, previous):
         "home_name": f["_home_name"], "away_name": f["_away_name"],
         "started": f.get("started", False), "finished": f.get("finished_provisional", False),
         "minutes": f.get("minutes", 0), "clock": f.get("_pl_clock"),
+        "referee": f.get("_referee"),
         "kickoff": f.get("kickoff_time"),
         "hs": f.get("team_h_score"), "as": f.get("team_a_score"),
         "hd": f.get("team_h_difficulty"), "ad": f.get("team_a_difficulty"),
