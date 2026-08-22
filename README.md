@@ -34,44 +34,25 @@ Two ways to use it, chosen on first run and changeable in settings:
 
 ```bash
 omarchy plugin add https://github.com/weedwhitesandwine/FPL-Gaffer.git --enable
+```
+
+Then restart the shell and open it once to meet the greeter, which asks which
+of the two modes you want and, in FPL Gaffer mode, for your team ID.
+
+```bash
 omarchy restart shell
 ```
 
-That is Omarchy's own installer: it clones the repository, validates the
-manifest, installs to `~/.config/omarchy/plugins/io.github.weedwhitesandwine.gaffer`,
-and — because this plugin ships a bar widget — offers to place its readout in
-the bar. Leave off `--enable` if you would rather turn it on yourself in the
-plugin manager.
-
-On first run it asks which of the two modes you want, and in FPL Gaffer mode
-for your team ID; the settings screen tells you where to find that.
-
-To update later, or to remove it:
+To update or remove it later:
 
 ```bash
 omarchy plugin update io.github.weedwhitesandwine.gaffer
 omarchy plugin remove io.github.weedwhitesandwine.gaffer
 ```
 
-Removing the plugin leaves your settings and cache in `~/.local/state/gaffer`
-so a reinstall picks up where you left off. Delete that directory yourself if
-you want them gone.
-
-### Installing from a clone instead
-
-Only needed if you are working on the plugin rather than using it:
-
-```bash
-git clone https://github.com/weedwhitesandwine/FPL-Gaffer.git
-cd FPL-Gaffer
-./install.sh
-```
-
-`install.sh` lists exactly what it will write and writes nothing until you
-agree; `--dry-run` shows the list and stops, `--yes` skips the prompt, and
-`--uninstall` removes the plugin and asks separately before touching your
-data. It stages the files and moves them into place in one step, because the
-shell reloads a plugin on every write inside its folder.
+Removing the plugin leaves your settings and cache in `~/.local/state/gaffer`,
+so reinstalling picks up where you left off. Delete that directory yourself if
+you want a clean slate.
 
 ## What it writes, and when
 
@@ -98,7 +79,7 @@ pipeline built from remote data.
 
 | Path | When |
 | --- | --- |
-| its own plugin folder | at install time only |
+| its own plugin folder | never, after `omarchy plugin add` clones it |
 | `~/.local/state/gaffer/` — settings, state, cache, log, backups | continuously, while running |
 | `~/.config/hypr/bindings.lua` | **only if you set a hotkey**, and only inside its own marked block, leaving every other line untouched |
 | `~/.config/omarchy/shell.json` | **only if you turn the bar readout on or off**, and only its own entry |
@@ -106,7 +87,8 @@ pipeline built from remote data.
 Those last two are the only files outside its own directory it will ever
 touch, and neither is written unless you change that specific setting —
 finishing the first-run greeter does not rewrite either of them. It deletes
-nothing on its own; clearing the cache is a command you run.
+nothing on its own; clearing the cache is a command you run
+(`gaffer-ctl.sh clear-cache`).
 
 **Privileges: none.** It never asks for a password, never uses `sudo` or
 `pkexec`, and does nothing as root. It does not start a second Quickshell
