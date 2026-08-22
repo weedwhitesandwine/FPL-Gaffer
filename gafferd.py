@@ -132,17 +132,41 @@ def write_atomic(path, payload):
     os.replace(tmp, path)
 
 
-def read_json(path, fallback=None):
+# Ceilings on everything that arrives from outside this process. Nothing either
+# feed publishes comes close to the wire limit: the whole fantasy player
+# database is under two megabytes. Reading without one would let a single
+# oversized reply — or a small, heavily compressed one that unpacks into
+# gigabytes — exhaust the memory of a process that runs all day, and then write
+# the result into the cache folder.
+#
+# The files in the state directory get the same treatment. This process writes
+# them, but it does not own the disk: a restored backup, or anything else able
+# to write a home directory, can leave something quite different behind. Each
+# file is read up to its ceiling and one byte further — that byte is what says
+# it is too big — and refused there, before it is parsed. The cache holds whole
+# API responses, so it gets the same ceiling the network does.
+MAX_WIRE = 8 * 1024 * 1024        # bytes accepted over the wire
+MAX_UNPACKED = 32 * 1024 * 1024   # bytes accepted after decompression
+MAX_SETTINGS_BYTES = 64 * 1024
+MAX_STATE_BYTES = 8 * 1024 * 1024
+MAX_CACHE_BYTES = MAX_WIRE
+
+
+def read_json(path, fallback=None, ceiling=MAX_STATE_BYTES):
     try:
-        with open(path) as fh:
-            return json.load(fh)
+        with open(path, "rb") as fh:
+            raw = fh.read(ceiling + 1)
+        if len(raw) > ceiling:
+            log("%s is larger than %d bytes, ignoring it" % (path, ceiling))
+            return fallback
+        return json.loads(raw.decode("utf-8"))
     except (OSError, ValueError):
         return fallback
 
 
 def load_settings():
     settings = dict(DEFAULT_SETTINGS)
-    stored = read_json(SETTINGS_FILE, {}) or {}
+    stored = read_json(SETTINGS_FILE, {}, MAX_SETTINGS_BYTES) or {}
     settings.update({k: v for k, v in stored.items() if k in DEFAULT_SETTINGS})
     notify = dict(DEFAULT_SETTINGS["notify"])
     notify.update(stored.get("notify") or {})
@@ -172,17 +196,6 @@ def notify(title, body, urgency="normal", icon="applications-games"):
 MANUAL = False
 MANUAL_KINDS = ("fixtures", "live", "status", "entry", "picks")
 MANUAL_TTL = 5
-
-
-# How much either feed is allowed to send us. Nothing they publish comes
-# close: the whole fantasy player database is under two megabytes. Reading
-# without a ceiling would let a single oversized reply — or a small, heavily
-# compressed one that unpacks into gigabytes — exhaust the memory of a
-# process that runs all day, and then write the result into the cache folder.
-# Past the cap we treat the reply as a failed fetch, which already falls back
-# to the last good copy on disk.
-MAX_WIRE = 8 * 1024 * 1024        # bytes accepted over the wire
-MAX_UNPACKED = 32 * 1024 * 1024   # bytes accepted after decompression
 
 
 class TooBig(Exception):
@@ -223,7 +236,7 @@ def fetch(path, kind, live, force=False):
     if not force and os.path.exists(cache_path):
         age = time.time() - os.path.getmtime(cache_path)
         if age < ttl:
-            cached = read_json(cache_path)
+            cached = read_json(cache_path, ceiling=MAX_CACHE_BYTES)
             if cached is not None:
                 return cached
 
@@ -237,7 +250,7 @@ def fetch(path, kind, live, force=False):
     except (urllib.error.URLError, ValueError, OSError, TimeoutError,
             zlib.error, TooBig) as exc:
         log("fetch failed %s: %s" % (path, exc))
-        return read_json(cache_path)  # stale beats nothing
+        return read_json(cache_path, ceiling=MAX_CACHE_BYTES)  # stale beats nothing
 
     try:
         write_atomic(cache_path, data)
@@ -253,7 +266,7 @@ def pulse_fetch(path, ttl):
     cache_path = os.path.join(CACHE_DIR, slug + ".json")
     if os.path.exists(cache_path):
         if time.time() - os.path.getmtime(cache_path) < ttl:
-            cached = read_json(cache_path)
+            cached = read_json(cache_path, ceiling=MAX_CACHE_BYTES)
             if cached is not None:
                 return cached
 
@@ -270,7 +283,7 @@ def pulse_fetch(path, ttl):
     except (urllib.error.URLError, ValueError, OSError, TimeoutError,
             zlib.error, TooBig) as exc:
         log("pulse fetch failed %s: %s" % (path, exc))
-        return read_json(cache_path)
+        return read_json(cache_path, ceiling=MAX_CACHE_BYTES)
 
     try:
         write_atomic(cache_path, data)
@@ -431,7 +444,8 @@ def referee_records(all_fixtures):
     if not by_teams:
         return []
 
-    known = read_json(os.path.join(CACHE_DIR, "referees.json"), {}) or {}
+    known = read_json(os.path.join(CACHE_DIR, "referees.json"), {},
+                      MAX_CACHE_BYTES) or {}
     records = {}
 
     for fx in all_fixtures:
@@ -1097,7 +1111,7 @@ def squad_view(picks_payload, live_stats, prov, players, fixtures_by_team, teams
 # ------------------------------------------------------------------- notices
 
 def raise_notices(state, previous, settings):
-    seen = read_json(SEEN_FILE, {}) or {}
+    seen = read_json(SEEN_FILE, {}, MAX_SETTINGS_BYTES) or {}
     wants = settings["notify"]
     squad = {r["id"]: r for r in state.get("squad", [])}
     before = {r["id"]: r for r in (previous or {}).get("squad", [])}

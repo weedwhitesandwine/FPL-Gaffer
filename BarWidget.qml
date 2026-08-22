@@ -56,18 +56,40 @@ Ui.BarWidget {
     return (base ? base : root.home + "/.local/state") + "/gaffer"
   }
 
+  // bar.json is a dozen short values, but it lives on disk where a restored
+  // backup could put anything, and the bar is up for as long as the session is.
+  // FileView cannot stop short of the end of a file, so it does not do the
+  // reading: it watches with blockAllReads set, never pulling the file into
+  // memory, and `head` does the read with the ceiling in front of it.
+  readonly property int barCeiling: 64 * 1024
+
   FileView {
     path: root.stateDir + "/bar.json"
     printErrors: false
     watchChanges: true
-    onLoaded: {
-      try {
-        var b = JSON.parse(text())
-        if (b && typeof b === "object") root.barData = b
-      } catch (e) {}
-    }
-    onFileChanged: reload()
+    blockAllReads: true
+    preload: false
+    onFileChanged: root.readBar()
   }
+
+  function readBar() { barReader.running = false; barReader.running = true }
+
+  Process {
+    id: barReader
+    command: ["head", "-c", String(root.barCeiling), "--",
+              root.stateDir + "/bar.json"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var b = JSON.parse(text)
+          if (b && typeof b === "object") root.barData = b
+        } catch (e) {}
+      }
+    }
+  }
+
+  Component.onCompleted: root.readBar()
 
   Timer {
     interval: 30000

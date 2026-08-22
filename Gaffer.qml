@@ -304,21 +304,92 @@ Item {
     root.selectedIndex = 0
   }
 
-  Component.onCompleted: GafferState.overlay = root
+  Component.onCompleted: {
+    GafferState.overlay = root
+    root.readState()
+    root.readGsettings()
+    root.readSize()
+  }
 
   // ------------------------------------------------------------ data feeds
+  //
+  // These files are written by the engine, but they sit in a home directory a
+  // backup can be restored over, and this shell stays up for days — so a file
+  // it reads is a file it has to hold. FileView has no way to stop short of the
+  // end of a file, so it does not do the reading: everything comes through
+  // `head`, which puts the ceiling before the read rather than after it.
+  // Whatever is on disk, the shell is handed at most this many bytes; anything
+  // larger arrives cut off, fails to parse, and is refused, leaving the last
+  // good values in place.
+  readonly property int stateCeiling: 8 * 1024 * 1024
+  readonly property int settingsCeiling: 64 * 1024
+  readonly property int sizeCeiling: 64
+
+  // The watchers read nothing themselves. blockAllReads keeps the file out of
+  // the shell's memory altogether, leaving them the one job wanted of them:
+  // saying that something changed.
   FileView {
-    id: stateFile
     path: root.stateDir + "/state.json"
     printErrors: false
     watchChanges: true
-    onLoaded: {
-      try {
-        var s = JSON.parse(text())
-        if (s && typeof s === "object") { root.state = s; root.loaded = true }
-      } catch (e) {}
+    blockAllReads: true
+    preload: false
+    onFileChanged: root.readState()
+  }
+
+  FileView {
+    path: root.stateDir + "/settings.json"
+    printErrors: false
+    watchChanges: true
+    blockAllReads: true
+    preload: false
+    onFileChanged: root.readGsettings()
+  }
+
+  function readState() { stateReader.running = false; stateReader.running = true }
+  function readGsettings() { settingsReader.running = false; settingsReader.running = true }
+  function readSize() { sizeReader.running = false; sizeReader.running = true }
+
+  Process {
+    id: stateReader
+    command: ["head", "-c", String(root.stateCeiling), "--",
+              root.stateDir + "/state.json"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var s = JSON.parse(text)
+          if (s && typeof s === "object") { root.state = s; root.loaded = true }
+        } catch (e) {}
+      }
     }
-    onFileChanged: reload()
+  }
+
+  Process {
+    id: settingsReader
+    command: ["head", "-c", String(root.settingsCeiling), "--",
+              root.stateDir + "/settings.json"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var s = JSON.parse(text)
+          if (s && typeof s === "object") root.gsettings = s
+        } catch (e) {}
+      }
+    }
+  }
+
+  Process {
+    id: sizeReader
+    command: ["head", "-c", String(root.sizeCeiling), "--", root.sizeFile]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var m = String(text || "").trim().match(/^(\d+)x(\d+)$/)
+        if (m) { root.userWidth = parseInt(m[1]); root.userHeight = parseInt(m[2]) }
+      }
+    }
   }
 
   // The engine replaces state.json by renaming a new file over the old one, so
@@ -331,29 +402,7 @@ Item {
     running: root.opened
     repeat: true
     triggeredOnStart: true
-    onTriggered: stateFile.reload()
-  }
-
-  FileView {
-    path: root.stateDir + "/settings.json"
-    printErrors: false
-    watchChanges: true
-    onLoaded: {
-      try {
-        var s = JSON.parse(text())
-        if (s && typeof s === "object") root.gsettings = s
-      } catch (e) {}
-    }
-    onFileChanged: reload()
-  }
-
-  FileView {
-    path: root.sizeFile
-    printErrors: false
-    onLoaded: {
-      var m = String(text() || "").trim().match(/^(\d+)x(\d+)$/)
-      if (m) { root.userWidth = parseInt(m[1]); root.userHeight = parseInt(m[2]) }
-    }
+    onTriggered: root.readState()
   }
 
   // The engine. Runs as a child of the shell so its life matches the shell's,
@@ -401,7 +450,7 @@ Item {
     command: ["python3", root.pluginDir + "/gafferd.py", "once"]
     // Running the engine is only half a refresh: it writes the file, and
     // nothing has told the overlay to read it back.
-    onExited: stateFile.reload()
+    onExited: root.readState()
   }
 
   Timer {
