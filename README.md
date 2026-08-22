@@ -33,48 +33,45 @@ Two ways to use it, chosen on first run and changeable in settings:
 ## Install
 
 ```bash
+omarchy plugin add https://github.com/weedwhitesandwine/FPL-Gaffer.git --enable
+omarchy restart shell
+```
+
+That is Omarchy's own installer: it clones the repository, validates the
+manifest, installs to `~/.config/omarchy/plugins/io.github.weedwhitesandwine.gaffer`,
+and — because this plugin ships a bar widget — offers to place its readout in
+the bar. Leave off `--enable` if you would rather turn it on yourself in the
+plugin manager.
+
+On first run it asks which of the two modes you want, and in FPL Gaffer mode
+for your team ID; the settings screen tells you where to find that.
+
+To update later, or to remove it:
+
+```bash
+omarchy plugin update io.github.weedwhitesandwine.gaffer
+omarchy plugin remove io.github.weedwhitesandwine.gaffer
+```
+
+Removing the plugin leaves your settings and cache in `~/.local/state/gaffer`
+so a reinstall picks up where you left off. Delete that directory yourself if
+you want them gone.
+
+### Installing from a clone instead
+
+Only needed if you are working on the plugin rather than using it:
+
+```bash
+git clone https://github.com/weedwhitesandwine/FPL-Gaffer.git
+cd FPL-Gaffer
 ./install.sh
 ```
 
-It lists exactly what it will write and where, and writes nothing until you
-say yes. `--dry-run` shows the list and stops; `--yes` skips the prompt;
-`--uninstall` removes the code and asks separately before touching your data.
-
-It writes to exactly two places:
-
-| What | Where | Why there |
-| --- | --- | --- |
-| Plugin code | `~/.config/omarchy/plugins/io.github.weedwhitesandwine.gaffer` | the only place the shell loads plugins from (`--plugin-dir` to override) |
-| Settings, cache, logs | `~/.local/state/gaffer` (or `$XDG_STATE_HOME`) | **must** stay out of the plugin folder — see below |
-
-The state file cannot live in the plugin folder. Omarchy watches that folder
-recursively with `inotifywait -m -r` and reloads the plugin on every write
-inside it, so a file that changes each minute during a match would reload
-your shell each minute too. Measured: five writes into a subfolder of a
-plugin directory produced seven plugin reloads.
-
-The files are staged and moved into place in one step, so installing costs
-one shell reload rather than one per file. Then run `omarchy restart shell`
-and enable it in the plugin manager.
-
-## Removing it
-
-```bash
-./install.sh --uninstall
-```
-
-It asks before removing the plugin, and asks separately before touching your
-settings and cache — the default is to leave them. To take it out of the bar
-and drop its hotkey without uninstalling:
-
-```bash
-./gaffer-ctl.sh bar off
-./gaffer-ctl.sh unbind
-```
-
-Or remove it through the Omarchy plugin manager, which handles the plugin
-folder; your settings under `~/.local/state/gaffer` stay until you delete
-them.
+`install.sh` lists exactly what it will write and writes nothing until you
+agree; `--dry-run` shows the list and stops, `--yes` skips the prompt, and
+`--uninstall` removes the plugin and asks separately before touching your
+data. It stages the files and moves them into place in one step, because the
+shell reloads a plugin on every write inside its folder.
 
 ## What it writes, and when
 
