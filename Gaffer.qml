@@ -780,9 +780,12 @@ Item {
         }
 
         // --------------------------------------------------------- contents
+        // The footer is a fixed strip, so its height is taken out here
+        // rather than letting the content claim the lot and push it off the
+        // bottom of the card.
         Item {
           width: parent.width
-          height: parent.height - y
+          height: parent.height - y - (footerBar.visible ? footerBar.height + parent.spacing : 0)
 
           // First run: choose how you want to use it, then (only if you
           // play the fantasy game) which team is yours.
@@ -968,25 +971,39 @@ Item {
         }
 
         // ----------------------------------------------------------- footer
-        Item {
+        // A fixed black strip with white text. The keys are the one thing a
+        // newcomer has to be able to read, so this ignores the theme and
+        // sets its own contrast, at a size meant to be read rather than
+        // merely noticed.
+        Rectangle {
+          id: footerBar
           width: parent.width
-          height: footerText.implicitHeight
+          height: footerText.implicitHeight + Style.spacing.md * 2
           visible: root.view === "list"
+          radius: root.cornerRadius
+          color: "#000000"
+          border.width: 1
+          border.color: Qt.rgba(1, 1, 1, 0.18)
 
           Text {
             id: footerText
             anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: Style.spacing.rowPaddingX
             text: "Tab tabs · ↑↓ move · Enter act · Ctrl+, settings · Ctrl+R refresh · Esc close"
-            color: root.fainter
+            color: "#ffffff"
             font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
+            font.pixelSize: Style.font.title
           }
+
           Text {
             anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.rightMargin: Style.spacing.rowPaddingX
             text: (root.state.live_now ? "live · " : "") + "updated " + Fmt.ago(root.state.updated)
-            color: root.state.live_now ? root.accent : root.fainter
+            color: root.state.live_now ? "#7fe3a8" : "#ffffff"
             font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
+            font.pixelSize: Style.font.title
           }
         }
       }

@@ -16,15 +16,17 @@ Item {
   property string position: "all"
   property string sortKey: "points"
 
+  // Fantasy points and bonus points only exist inside the game, so the
+  // football-only mode sorts and shows what actually happened on the pitch.
   readonly property var sorts: statto
     ? [
-        { id: "points",  label: "Points" },
         { id: "goals",   label: "Goals" },
         { id: "assists", label: "Assists" },
+        { id: "xg",      label: "xG" },
+        { id: "xa",      label: "xA" },
         { id: "xgi",     label: "xGI" },
-        { id: "defcon",  label: "Def" },
         { id: "minutes", label: "Minutes" },
-        { id: "bonus",   label: "Bonus" }
+        { id: "defcon",  label: "Def" }
       ]
     : [
         { id: "points",   label: "Points" },
@@ -37,7 +39,7 @@ Item {
         { id: "ep",       label: "Predicted" }
       ]
 
-  onStattoChanged: if (tab.sortKey !== "points") tab.sortKey = "points"
+  onStattoChanged: tab.sortKey = statto ? "goals" : "points"
 
   readonly property var rows: {
     var all = st.all_players || []
@@ -136,9 +138,9 @@ Item {
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
         Repeater {
           model: tab.statto
-            ? [ { w: 46, t: "PTS" }, { w: 46, t: "G" }, { w: 46, t: "A" },
-                { w: 52, t: "MINS" }, { w: 46, t: "xGI" }, { w: 46, t: "DEF" },
-                { w: 46, t: "BON" } ]
+            ? [ { w: 46, t: "G" }, { w: 46, t: "A" }, { w: 52, t: "MINS" },
+                { w: 46, t: "xG" }, { w: 46, t: "xA" }, { w: 46, t: "xGI" },
+                { w: 46, t: "DEF" } ]
             : [ { w: 52, t: "PRICE" }, { w: 46, t: "PTS" }, { w: 46, t: "FORM" },
                 { w: 52, t: "OWNED" }, { w: 46, t: "xGI" }, { w: 46, t: "DEF" },
                 { w: 52, t: "PRED" } ]
@@ -191,8 +193,12 @@ Item {
           anchors.rightMargin: Style.spacing.rowPaddingX
           spacing: Style.spacing.md
 
-          Row {
+          Item {
             width: Style.space(160)
+            height: Style.font.body
+            anchors.verticalCenter: parent.verticalCenter
+            Row {
+            anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.space(4)
 
@@ -230,6 +236,7 @@ Item {
               font.bold: true
             }
           }
+          }
 
           Text {
             width: Style.space(34)
@@ -264,14 +271,16 @@ Item {
 
           Repeater {
             model: tab.statto
-              ? [ { w: 46, v: String(modelData.points), bold: true },
-                  { w: 46, v: String(modelData.goals || 0), bold: false },
-                  { w: 46, v: String(modelData.assists || 0), bold: false },
+              ? [ { w: 46, v: String(modelData.goals || 0), bold: true },
+                  { w: 46, v: String(modelData.assists || 0), bold: true },
                   { w: 52, v: String(modelData.minutes || 0), bold: false },
+                  { w: 46, v: modelData.xg !== undefined && modelData.xg !== null
+                              ? Number(modelData.xg).toFixed(1) : "—", bold: false },
+                  { w: 46, v: modelData.xa !== undefined && modelData.xa !== null
+                              ? Number(modelData.xa).toFixed(1) : "—", bold: false },
                   { w: 46, v: modelData.xgi !== undefined && modelData.xgi !== null
                               ? Number(modelData.xgi).toFixed(1) : "—", bold: false },
-                  { w: 46, v: String(modelData.defcon || 0), bold: false },
-                  { w: 46, v: String(modelData.bonus || 0), bold: false } ]
+                  { w: 46, v: String(modelData.defcon || 0), bold: false } ]
               : [ { w: 46, v: String(modelData.points), bold: true },
                   { w: 46, v: String(modelData.form), bold: false },
                   { w: 52, v: modelData.selected + "%", bold: false },

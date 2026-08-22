@@ -498,7 +498,7 @@ def build_league_table(all_fixtures, teams):
     return rows
 
 
-def fetch_league(league_id, live, cap, players, live_stats, prov, entry_id):
+def fetch_league(league_id, live, cap, players, live_stats, prov, entry_id, summary=None):
     """A mini-league table, recalculated live where the league is small."""
     data = fetch("/leagues-classic/%d/standings/?page_standings=1" % league_id, "league", live)
     if not data:
@@ -536,11 +536,20 @@ def fetch_league(league_id, live, cap, players, live_stats, prov, entry_id):
             for i, row in enumerate(rows, 1):
                 row["live_rank"] = i
 
+    summary = summary or {}
+    total = summary.get("size") or league.get("rank_count") or len(rows)
+    # In a league of millions you will not appear in the first fifty, so
+    # carry your own standing separately and let the tab show it regardless.
+    mine = next((r for r in rows if r["entry"] == entry_id), None)
     return {
         "id": league_id,
-        "name": league.get("name"),
-        "size": len(rows),
+        "name": league.get("name") or summary.get("name"),
+        "size": total,
+        "shown": len(rows[:60]),
         "computed": bool(rows and rows[0].get("live_rank")),
+        "your_rank": summary.get("rank"),
+        "your_last_rank": summary.get("last_rank"),
+        "in_view": mine is not None,
         "rows": rows[:60],
         "me": entry_id,
     }
@@ -929,10 +938,11 @@ def refresh(settings, previous):
     # ---- mini-leagues, small ones scored live
     cap = int(settings.get("leagueMemberCap") or 120)
     tables = []
-    for league in (state.get("leagues", [])[:8] if mode == "gaffer" else []):
-        if league["size"] and league["size"] > 5000:
-            continue  # a global league is a table nobody reads in a popup
-        table = fetch_league(league["id"], live_now, cap, players, live_stats, prov, entry_id)
+    # Small leagues first — those are the ones with someone in them you know.
+    ordered = sorted(state.get("leagues", []), key=lambda l: l.get("size") or 0)
+    for league in (ordered[:20] if mode == "gaffer" else []):
+        table = fetch_league(league["id"], live_now, cap, players, live_stats, prov,
+                             entry_id, league)
         if table:
             tables.append(table)
     state["tables"] = tables

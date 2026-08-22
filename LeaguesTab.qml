@@ -29,6 +29,15 @@ Item {
     return out
   }
 
+  // Shared column widths, so the headings and the rows cannot drift apart.
+  readonly property int wRank:    Style.space(56)
+  readonly property int wTeam:    Style.space(200)
+  readonly property int wManager: Style.space(160)
+  readonly property int wChip:    Style.space(58)
+  readonly property int wGw:      Style.space(52)
+  readonly property int wTotal:   Style.space(60)
+  readonly property int colGap:   Style.spacing.md
+
   function activate(index) {
     // Enter cycles to the next league.
     if (tables.length > 1) {
@@ -63,7 +72,7 @@ Item {
           Text {
             id: label
             anchors.centerIn: parent
-            text: modelData.name + "  " + modelData.size
+            text: modelData.name + "  " + Fmt.rank(modelData.size)
             color: current ? (app ? app.selectedText : "#fff") : (app ? app.dim : "#aaa")
             font.family: app ? app.fontFamily : "monospace"
             font.pixelSize: Style.font.bodySmall
@@ -79,15 +88,42 @@ Item {
       }
     }
 
-    Text {
+    Row {
       width: parent.width
       visible: tab.league !== null
-      text: tab.league && tab.league.computed
-            ? "Scored live from every member's team."
-            : "Official standings — this league is too big to re-score live."
-      color: tab.league && tab.league.computed ? (app ? app.accent : "#fff") : (app ? app.fainter : "#888")
-      font.family: app ? app.fontFamily : "monospace"
-      font.pixelSize: Style.font.caption
+      spacing: Style.spacing.lg
+
+      Text {
+        text: {
+          if (!tab.league) return ""
+          if (tab.league.computed) return "Scored live from every member's team."
+          if (tab.league.size > tab.league.shown)
+            return "Top " + tab.league.shown + " of " + Fmt.commas(tab.league.size) + "."
+          return "Official standings."
+        }
+        color: tab.league && tab.league.computed ? (app ? app.accent : "#fff")
+                                                 : (app ? app.fainter : "#888")
+        font.family: app ? app.fontFamily : "monospace"
+        font.pixelSize: Style.font.caption
+      }
+
+      // In a league of millions you will not be in the first fifty, so your
+      // own standing is stated rather than left for you to hunt for.
+      Text {
+        visible: tab.league && !tab.league.in_view && tab.league.your_rank
+        text: {
+          if (!tab.league || !tab.league.your_rank) return ""
+          var line = "You: " + Fmt.commas(tab.league.your_rank)
+          var moved = Fmt.movement(tab.league.your_rank, tab.league.your_last_rank)
+          if (moved !== 0 && tab.league.your_last_rank)
+            line += (moved > 0 ? "  ▲" : "  ▼") + Fmt.commas(Math.abs(moved))
+          return line
+        }
+        color: app ? app.accent : "#fff"
+        font.family: app ? app.fontFamily : "monospace"
+        font.pixelSize: Style.font.caption
+        font.bold: true
+      }
     }
 
     // Column headings
@@ -99,20 +135,20 @@ Item {
         anchors.fill: parent
         anchors.leftMargin: Style.spacing.rowPaddingX
         anchors.rightMargin: Style.spacing.rowPaddingX
-        spacing: Style.spacing.md
-        Text { width: Style.space(50); text: "RANK"; color: app ? app.fainter : "#888"
+        spacing: tab.colGap
+        Text { width: tab.wRank; text: "RANK"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-        Text { width: Style.space(190); text: "TEAM"; color: app ? app.fainter : "#888"
+        Text { width: tab.wTeam; text: "TEAM"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-        Text { width: Style.space(150); text: "MANAGER"; color: app ? app.fainter : "#888"
+        Text { width: tab.wManager; text: "MANAGER"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-        Text { width: Style.space(56); horizontalAlignment: Text.AlignRight; text: "CHIP"
+        Text { width: tab.wChip; horizontalAlignment: Text.AlignRight; text: "CHIP"
                color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-        Text { width: Style.space(48); horizontalAlignment: Text.AlignRight; text: "GW"
+        Text { width: tab.wGw; horizontalAlignment: Text.AlignRight; text: "GW"
                color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-        Text { width: Style.space(56); horizontalAlignment: Text.AlignRight; text: "TOTAL"
+        Text { width: tab.wTotal; horizontalAlignment: Text.AlignRight; text: "TOTAL"
                color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
       }
@@ -152,10 +188,15 @@ Item {
           anchors.fill: parent
           anchors.leftMargin: Style.spacing.rowPaddingX
           anchors.rightMargin: Style.spacing.rowPaddingX
-          spacing: Style.spacing.md
+          spacing: tab.colGap
 
-          Row {
-            width: Style.space(50)
+          Item {
+            width: tab.wRank
+            height: Style.font.body
+            anchors.verticalCenter: parent.verticalCenter
+
+            Row {
+            anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.space(3)
             Text {
@@ -171,10 +212,11 @@ Item {
               font.family: app ? app.fontFamily : "monospace"
               font.pixelSize: Style.font.caption
             }
+            }
           }
 
           Text {
-            width: Style.space(190)
+            width: tab.wTeam
             anchors.verticalCenter: parent.verticalCenter
             text: modelData.name || "—"
             color: app ? app.foreground : "#fff"
@@ -185,7 +227,7 @@ Item {
           }
 
           Text {
-            width: Style.space(150)
+            width: tab.wManager
             anchors.verticalCenter: parent.verticalCenter
             text: modelData.player || "—"
             color: app ? app.dim : "#aaa"
@@ -195,7 +237,7 @@ Item {
           }
 
           Text {
-            width: Style.space(56)
+            width: tab.wChip
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
             text: modelData.chip ? String(modelData.chip).toUpperCase() : ""
@@ -205,7 +247,7 @@ Item {
           }
 
           Text {
-            width: Style.space(48)
+            width: tab.wGw
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
             text: modelData.live_gw !== null && modelData.live_gw !== undefined
@@ -217,7 +259,7 @@ Item {
           }
 
           Text {
-            width: Style.space(56)
+            width: tab.wTotal
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
             text: modelData.live_total !== null && modelData.live_total !== undefined

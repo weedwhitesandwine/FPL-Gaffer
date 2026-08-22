@@ -33,6 +33,19 @@ Item {
 
   function activate(index) {}
 
+  // Column widths live here once. The heading row and the data rows both
+  // read them, which is the only reliable way to keep a table lined up.
+  readonly property int wPos:   Style.space(30)
+  readonly property int wClub:  Style.space(172)
+  readonly property int wStat:  Style.space(34)
+  readonly property int wPts:   Style.space(42)
+  readonly property int wForm:  Style.space(78)
+  readonly property int formLead: Style.space(12)
+  readonly property int wGap:   Style.space(56)
+  readonly property int wSquad: Style.space(104)
+  readonly property int colGap: Style.spacing.md
+  readonly property var statLabels: ["PL", "W", "D", "L", "GF", "GA", "GD"]
+
   // European places and relegation, drawn as a thin edge marker.
   // Europe and the drop mean the same thing in every theme, so these are
   // fixed too — Champions League green, Europa blue, relegation red.
@@ -55,17 +68,17 @@ Item {
         anchors.fill: parent
         anchors.leftMargin: Style.spacing.rowPaddingX
         anchors.rightMargin: Style.spacing.rowPaddingX
-        spacing: Style.spacing.md
+        spacing: tab.colGap
 
-        Text { width: Style.space(24); text: "#"; color: app ? app.fainter : "#888"
+        Text { width: tab.wPos; text: "#"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-        Text { width: Style.space(160); text: "CLUB"; color: app ? app.fainter : "#888"
+        Text { width: tab.wClub; text: "CLUB"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
         Repeater {
-          model: ["PL", "W", "D", "L", "GF", "GA", "GD"]
+          model: tab.statLabels
           delegate: Text {
             required property var modelData
-            width: Style.space(32)
+            width: tab.wStat
             horizontalAlignment: Text.AlignRight
             text: modelData
             color: app ? app.fainter : "#888"
@@ -73,10 +86,19 @@ Item {
             font.pixelSize: Style.font.caption
           }
         }
-        Text { width: Style.space(38); horizontalAlignment: Text.AlignRight; text: "PTS"
+        Text { width: tab.wPts; horizontalAlignment: Text.AlignRight; text: "PTS"
                color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-        Text { width: Style.space(70); text: "FORM"; color: app ? app.fainter : "#888"
+        Item { width: tab.formLead; height: 1 }
+        Text { width: tab.wForm; text: "FORM"; color: app ? app.fainter : "#888"
+               font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
+
+        // Set apart from the league's own figures, because this one is about
+        // your team rather than the club's season.
+        Item { width: tab.wGap; height: 1 }
+        Text { width: tab.wSquad; horizontalAlignment: Text.AlignHCenter
+               visible: !(app && app.statto)
+               text: "SQUAD PLAYERS"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
       }
     }
@@ -123,10 +145,10 @@ Item {
           anchors.fill: parent
           anchors.leftMargin: Style.spacing.rowPaddingX
           anchors.rightMargin: Style.spacing.rowPaddingX
-          spacing: Style.spacing.md
+          spacing: tab.colGap
 
           Text {
-            width: Style.space(24)
+            width: tab.wPos
             anchors.verticalCenter: parent.verticalCenter
             text: String(modelData.position)
             color: app ? app.dim : "#aaa"
@@ -134,28 +156,15 @@ Item {
             font.pixelSize: Style.font.bodySmall
           }
 
-          Row {
-            width: Style.space(160)
+          Text {
+            width: tab.wClub
             anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.spacing.sm
-            Text {
-              text: modelData.name
-              color: app ? app.foreground : "#fff"
-              font.family: app ? app.fontFamily : "monospace"
-              font.pixelSize: Style.font.body
-              font.bold: mine > 0
-              elide: Text.ElideRight
-              width: Math.min(implicitWidth, Style.space(126))
-            }
-            Text {
-              visible: mine > 0
-              anchors.verticalCenter: parent.verticalCenter
-              text: "·" + mine
-              color: app ? app.accent : "#fff"
-              font.family: app ? app.fontFamily : "monospace"
-              font.pixelSize: Style.font.caption
-              font.bold: true
-            }
+            text: modelData.name
+            color: app ? app.foreground : "#fff"
+            font.family: app ? app.fontFamily : "monospace"
+            font.pixelSize: Style.font.body
+            font.bold: mine > 0
+            elide: Text.ElideRight
           }
 
           Repeater {
@@ -163,7 +172,7 @@ Item {
                     modelData.gf, modelData.ga, Fmt.signed(modelData.gd)]
             delegate: Text {
               required property var modelData
-              width: Style.space(32)
+              width: tab.wStat
               anchors.verticalCenter: parent.verticalCenter
               horizontalAlignment: Text.AlignRight
               text: String(modelData)
@@ -174,7 +183,7 @@ Item {
           }
 
           Text {
-            width: Style.space(38)
+            width: tab.wPts
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
             text: String(modelData.points)
@@ -184,9 +193,21 @@ Item {
             font.bold: true
           }
 
-          // Last five results, most recent last
-          Row {
-            width: Style.space(70)
+          Item { width: tab.formLead; height: 1 }
+
+          // Last five results, most recent last.
+          //
+          // Wrapped in a plain Item of fixed width. A Row sizes itself from
+          // its children, so an empty one collapses and drags every column
+          // after it out of line — which is exactly what happened to every
+          // club that had not played yet.
+          Item {
+            width: tab.wForm
+            height: Style.space(12)
+            anchors.verticalCenter: parent.verticalCenter
+
+            Row {
+            anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.space(2)
             Repeater {
@@ -195,7 +216,6 @@ Item {
                 required property var modelData
                 width: Style.space(12); height: Style.space(12)
                 radius: Style.space(2)
-                anchors.verticalCenter: parent.verticalCenter
                 color: app ? app.resultFill(modelData) : "#333"
                 border.width: 1
                 border.color: app ? app.fixedOutline : "#fff"
@@ -209,6 +229,21 @@ Item {
                 }
               }
             }
+            }
+          }
+
+          // How many of your players come from this club.
+          Item { width: tab.wGap; height: 1 }
+          Text {
+            width: tab.wSquad
+            visible: !(app && app.statto)
+            anchors.verticalCenter: parent.verticalCenter
+            horizontalAlignment: Text.AlignHCenter
+            text: mine > 0 ? String(mine) : ""
+            color: app ? app.accent : "#fff"
+            font.family: app ? app.fontFamily : "monospace"
+            font.pixelSize: Style.font.body
+            font.bold: true
           }
         }
       }
