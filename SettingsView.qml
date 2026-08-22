@@ -186,7 +186,7 @@ Item {
 
         Text {
           width: form.width
-          text: "Type digits to edit · Backspace to correct"
+          text: "Type digits to edit · Ctrl+V to paste · Backspace to correct"
           color: app ? app.fainter : "#888"
           font.family: app ? app.fontFamily : "monospace"
           font.pixelSize: Style.font.caption

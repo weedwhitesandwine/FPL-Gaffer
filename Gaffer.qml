@@ -360,6 +360,28 @@ Item {
     onTriggered: daemon.running = true
   }
 
+  // Pasting into the team-ID box. The box is a plain readout rather than a
+  // text input, so Ctrl+V has to be handled explicitly; only digits survive,
+  // which means pasting the whole address of your FPL page works as well as
+  // pasting the bare number.
+  Process {
+    id: pasteProc
+    command: ["wl-paste", "--no-newline"]
+    stdout: StdioCollector {
+      id: pasteOut
+      waitForEnd: true
+      onStreamFinished: {
+        var digits = String(pasteOut.text || "").replace(/[^0-9]/g, "")
+        if (digits) root.draftEntry = digits.slice(0, 10)
+      }
+    }
+  }
+
+  function pasteEntry() {
+    pasteProc.running = false
+    pasteProc.running = true
+  }
+
   Process {
     id: refreshProc
     command: ["python3", root.pluginDir + "/gafferd.py", "once"]
@@ -573,6 +595,10 @@ Item {
             } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
               if (root.greetStep === 0) root.advanceGreeter()
               else root.applyDrafts()
+            } else if (event.key === Qt.Key_V
+                       && (event.modifiers & (Qt.ControlModifier | Qt.MetaModifier))) {
+              root.greetStep = 1
+              root.pasteEntry()
             } else if (event.key === Qt.Key_Backspace) {
               root.draftEntry = root.draftEntry.slice(0, -1)
             } else if (event.text && event.text.match(/[0-9]/)) {
@@ -588,6 +614,9 @@ Item {
               root.view = "list"
             } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
               root.applyDrafts()
+            } else if (event.key === Qt.Key_V
+                       && (event.modifiers & (Qt.ControlModifier | Qt.MetaModifier))) {
+              root.pasteEntry()
             } else if (event.key === Qt.Key_Backspace) {
               root.draftEntry = root.draftEntry.slice(0, -1)
             } else if (event.text && event.text.match(/[0-9]/)) {
@@ -1033,7 +1062,7 @@ Item {
               }
               Text {
                 width: parent.width
-                text: "Enter to save  ·  Esc to go back"
+                text: "Enter to save  ·  Ctrl+V to paste  ·  Esc to go back"
                 color: root.fainter
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
