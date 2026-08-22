@@ -126,13 +126,33 @@ Item {
                   font.pixelSize: Style.font.heading
                 }
 
+                // "both" is the referee's pocket: a yellow with a red
+                // tucked behind it.
+                Rectangle {
+                  visible: panel.modelData.swatch === "both"
+                  anchors.left: parent.left
+                  anchors.leftMargin: Style.space(5)
+                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.verticalCenterOffset: -Style.space(2)
+                  width: Style.space(10)
+                  height: Style.space(14)
+                  radius: Style.space(2)
+                  rotation: 12
+                  color: app ? app.cardRed : "#ff2b2b"
+                  border.width: 1
+                  border.color: app ? app.fixedOutline : "#fff"
+                }
+
                 Rectangle {
                   visible: String(panel.modelData.swatch || "") !== ""
                   anchors.left: parent.left
                   anchors.verticalCenter: parent.verticalCenter
-                  width: Style.space(11)
-                  height: Style.space(15)
+                  anchors.verticalCenterOffset: panel.modelData.swatch === "both"
+                                                  ? Style.space(2) : 0
+                  width: Style.space(10)
+                  height: Style.space(14)
                   radius: Style.space(2)
+                  rotation: panel.modelData.swatch === "both" ? -8 : 0
                   color: panel.modelData.swatch === "red"
                            ? (app ? app.cardRed : "#ff2b2b")
                            : (app ? app.cardYellow : "#ffd400")

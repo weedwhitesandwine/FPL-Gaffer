@@ -27,6 +27,10 @@ import urllib.request
 from datetime import datetime, timezone
 
 API = "https://fantasy.premierleague.com/api"
+# The Premier League's own feed, used for one thing the fantasy game does not
+# publish: who refereed a match. It answers a plain client as long as the
+# request looks like it came from premierleague.com.
+PULSE = "https://footballapi.pulselive.com/football"
 UA = "Mozilla/5.0 (X11; Linux x86_64) Gaffer/1.0 (Omarchy plugin)"
 
 # Settings, cache and logs. This is deliberately NOT inside the plugin
@@ -184,6 +188,108 @@ def fetch(path, kind, live, force=False):
     except OSError:
         pass
     return data
+
+
+def pulse_fetch(path, ttl):
+    """GET from the Premier League feed, cached on disk like the FPL one."""
+    slug = "pulse_" + path.strip("/").replace("/", "_").replace("?", "_") \
+                           .replace("=", "-").replace("&", "_")
+    cache_path = os.path.join(CACHE_DIR, slug + ".json")
+    if os.path.exists(cache_path):
+        if time.time() - os.path.getmtime(cache_path) < ttl:
+            cached = read_json(cache_path)
+            if cached is not None:
+                return cached
+
+    req = urllib.request.Request(
+        PULSE + path,
+        headers={"User-Agent": UA, "Accept": "application/json",
+                 "Accept-Encoding": "gzip",
+                 "Origin": "https://www.premierleague.com",
+                 "Referer": "https://www.premierleague.com/"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            raw = resp.read()
+            if resp.headers.get("Content-Encoding") == "gzip":
+                raw = gzip.decompress(raw)
+            data = json.loads(raw.decode("utf-8"))
+    except (urllib.error.URLError, ValueError, OSError, TimeoutError) as exc:
+        log("pulse fetch failed %s: %s" % (path, exc))
+        return read_json(cache_path)
+
+    try:
+        write_atomic(cache_path, data)
+    except OSError:
+        pass
+    return data
+
+
+def referee_records(all_fixtures):
+    """Cards shown by each referee, for the matches that have been played.
+
+    The referee comes from the Premier League feed; the cards come from the
+    fantasy feed we already have. A finished match never changes, so each
+    referee is looked up once and remembered.
+    """
+    seasons = pulse_fetch("/competitions/1/compseasons", 86400)
+    if not seasons or not seasons.get("content"):
+        return []
+    season_id = int(seasons["content"][0]["id"])
+
+    listing = pulse_fetch(
+        "/fixtures?comps=1&compSeasons=%d&pageSize=100&sort=asc" % season_id, 21600)
+    if not listing:
+        return []
+
+    # Match the two feeds on club names, which both take from the same source.
+    by_teams = {}
+    for f in listing.get("content") or []:
+        sides = f.get("teams") or []
+        if len(sides) != 2:
+            continue
+        key = (sides[0]["team"]["name"], sides[1]["team"]["name"])
+        by_teams[key] = int(f["id"])
+
+    known = read_json(os.path.join(CACHE_DIR, "referees.json"), {}) or {}
+    records = {}
+
+    for fx in all_fixtures:
+        if not fx.get("finished_provisional"):
+            continue
+        pulse_id = by_teams.get((fx.get("_home_name"), fx.get("_away_name")))
+        if not pulse_id:
+            continue
+
+        name = known.get(str(pulse_id))
+        if name is None:
+            detail = pulse_fetch("/fixtures/%d" % pulse_id, 31536000)
+            officials = (detail or {}).get("matchOfficials") or []
+            main = next((o for o in officials if o.get("role") == "MAIN"), None)
+            name = ((main or {}).get("name") or {}).get("display") or ""
+            known[str(pulse_id)] = name
+        if not name:
+            continue
+
+        stats = {s["identifier"]: s for s in fx.get("stats", [])}
+
+        def count(identifier):
+            entry = stats.get(identifier) or {}
+            return sum(r["value"] for side in ("h", "a") for r in entry.get(side, []) or [])
+
+        rec = records.setdefault(name, {"name": name, "matches": 0, "yellow": 0, "red": 0})
+        rec["matches"] += 1
+        rec["yellow"] += count("yellow_cards")
+        rec["red"] += count("red_cards")
+
+    try:
+        write_atomic(os.path.join(CACHE_DIR, "referees.json"), known)
+    except OSError:
+        pass
+
+    for rec in records.values():
+        rec["cards"] = rec["yellow"] + rec["red"]
+    return sorted(records.values(), key=lambda r: -r["cards"])
 
 
 # ------------------------------------------------------------ fpl arithmetic
@@ -468,7 +574,7 @@ def match_detail(fx, players):
 # or did not do, and a goal is a goal whether it came in the ninetieth minute
 # or the sixth. The old ninety-minute gate hid two of Arsenal's three
 # scorers on the opening weekend, which is exactly the wrong answer.
-def build_monsters(players):
+def build_monsters(players, referees=None):
     eligible = list(players.values())
 
     def card(p, value, suffix=""):
@@ -525,6 +631,27 @@ def build_monsters(players):
         "YELLOWS", eligible, num("yellow"), swatch="yellow")
     add("seeya", "See Ya", "", "Early bath specialists",
         "REDS", eligible, num("red"), swatch="red")
+
+    # The one category that is not about players at all.
+    whistle = []
+    for rec in (referees or [])[:3]:
+        breakdown = []
+        if rec["yellow"]:
+            breakdown.append("%dY" % rec["yellow"])
+        if rec["red"]:
+            breakdown.append("%dR" % rec["red"])
+        whistle.append({
+            "id": 0, "name": rec["name"],
+            "team": "%d match%s" % (rec["matches"], "" if rec["matches"] == 1 else "es"),
+            "pos": "", "cost": 0, "points": 0,
+            "value": rec["cards"], "suffix": "",
+            "duties": " ".join(breakdown),
+        })
+    cats.append({
+        "id": "refs", "title": "See You Next Tuesday", "glyph": "",
+        "blurb": "Referees, by cards shown", "stat": "CARDS",
+        "swatch": "both", "players": whistle,
+    })
 
     return {"categories": cats}
 
@@ -954,7 +1081,7 @@ def refresh(settings, previous):
     state["bonus_races"] = bonus_races(gw_fixtures, players)
     state["league_table"] = build_league_table(all_fixtures, teams)
     if mode == "gaffer":
-        state["monsters"] = build_monsters(players)
+        state["monsters"] = build_monsters(players, referee_records(all_fixtures))
     state["grid"] = build_fixture_grid(
         all_fixtures, teams, grid_start, int(settings.get("fixtureWeeks") or 6))
 
