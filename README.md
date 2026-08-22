@@ -209,6 +209,10 @@ documented or supported product, so it is treated gently: responses are
 cached, polling backs off when nothing is happening, and the plugin never
 hammers it.
 
+## Credits
+
+Built with [Claude Code](https://claude.com/claude-code).
+
 ## Licence
 
 MIT.
