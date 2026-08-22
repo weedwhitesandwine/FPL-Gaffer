@@ -17,20 +17,14 @@ Item {
   property var app: null
 
   readonly property var st: app && app.state ? app.state : ({})
-  readonly property string q: app ? app.filterText : ""
   readonly property var squad: st.squad || []
 
-  property string layout: "pitch"          // pitch | list
+  property string viewMode: "pitch"        // pitch | list
 
-  readonly property var rows: {
-    var out = []
-    for (var i = 0; i < squad.length; i++) {
-      var r = squad[i]
-      if (!Fmt.matches(r.name, q) && !Fmt.matches(r.team, q) && !Fmt.matches(r.pos, q)) continue
-      out.push(r)
-    }
-    return out
-  }
+  // The whole squad, always. There is no filter on this tab: fifteen names
+  // are already on screen, so a search box over them only adds a control
+  // that appears to do nothing.
+  readonly property var rows: squad
 
   // The starting XI split into its four lines, plus the bench.
   function line(pos) {
@@ -112,14 +106,6 @@ Item {
     property bool compact: false
 
     readonly property bool counting: p ? p.counting : false
-    readonly property bool matched: {
-      if (!p) return false
-      var needle = tab.q
-      if (!String(needle || "").trim()) return true
-      return Fmt.matches(p.name, needle) || Fmt.matches(p.team, needle)
-             || Fmt.matches(p.pos, needle)
-    }
-    readonly property bool filtering: String(tab.q || "").trim() !== ""
     readonly property bool selected: {
       if (!app || !p) return false
       var sel = tab.rows[app.selectedIndex]
@@ -130,13 +116,12 @@ Item {
     height: cardCol.implicitHeight + Style.spacing.sm * 2
     radius: app ? Math.max(app.cornerRadius, Style.space(3)) : 0
     color: selected ? (app ? app.shirtLit : "#2a9b5e") : (app ? app.shirt : "#1c7a48")
-    opacity: !matched ? 0.28 : (counting ? 1.0 : 0.72)
+    opacity: counting ? 1.0 : 0.72
 
     // A live match, the captain, or a filter hit all get a white edge —
     // white always reads on this green, whatever the theme is doing.
-    border.width: (matched && filtering) || (p && p.live) || (p && p.captain) || selected ? 1 : 0
-    border.color: (p && p.captain) || selected || (matched && filtering)
-                    ? "#ffffff" : (app ? app.shirtEdge : "#fff")
+    border.width: (p && p.live) || (p && p.captain) || selected ? 1 : 0
+    border.color: (p && p.captain) || selected ? "#ffffff" : (app ? app.shirtEdge : "#fff")
 
     Behavior on opacity { NumberAnimation { duration: 160 } }
 
@@ -371,7 +356,7 @@ Item {
           model: [{ id: "pitch", label: "Pitch" }, { id: "list", label: "List" }]
           delegate: Rectangle {
             required property var modelData
-            readonly property bool active: tab.layout === modelData.id
+            readonly property bool active: tab.viewMode === modelData.id
             width: switchLabel.implicitWidth + Style.spacing.lg
             height: Math.max(Style.space(22), Style.font.caption + Style.spacing.sm * 2)
             radius: app ? app.cornerRadius : 0
@@ -389,7 +374,7 @@ Item {
             MouseArea {
               anchors.fill: parent
               cursorShape: Qt.PointingHandCursor
-              onClicked: tab.layout = modelData.id
+              onClicked: tab.viewMode = modelData.id
             }
           }
         }
@@ -460,7 +445,7 @@ Item {
       id: pitchArea
       width: parent.width
       height: parent.height - y
-      visible: tab.layout === "pitch"
+      visible: tab.viewMode === "pitch"
 
       // The bench stands beside the pitch rather than under it. The pitch
       // has width to spare and no height to spare, so this trade buys the
@@ -612,7 +597,7 @@ Item {
     Item {
       width: parent.width
       height: parent.height - y
-      visible: tab.layout === "list"
+      visible: tab.viewMode === "list"
 
       Column {
         anchors.fill: parent
@@ -638,6 +623,7 @@ Item {
             Text { width: Style.space(44); horizontalAlignment: Text.AlignRight; text: "MIN"
                    color: app ? app.fainter : "#888"
                    font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
+            Item { width: Style.space(14); height: 1 }
             Text { width: Style.space(130); text: "RETURNS"; color: app ? app.fainter : "#888"
                    font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
             Text { width: Style.space(44); horizontalAlignment: Text.AlignRight; text: "BPS"
@@ -823,6 +809,8 @@ Item {
                   font.family: app ? app.fontFamily : "monospace"
                   font.pixelSize: Style.font.bodySmall
                 }
+
+                Item { width: Style.space(14); height: 1 }
 
                 Text {
                   width: Style.space(130)

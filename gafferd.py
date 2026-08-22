@@ -393,6 +393,8 @@ def label_fixtures(fixtures, teams):
             fx["_label"] = "%s v %s" % (home, away)
         fx["_home"] = home
         fx["_away"] = away
+        fx["_home_name"] = teams.get(fx["team_h"], {}).get("name", home)
+        fx["_away_name"] = teams.get(fx["team_a"], {}).get("name", away)
     return fixtures
 
 
@@ -851,6 +853,7 @@ def refresh(settings, previous):
     # ---- everything not tied to one manager
     state["fixtures"] = [{
         "id": f["id"], "label": f["_label"], "home": f["_home"], "away": f["_away"],
+        "home_name": f["_home_name"], "away_name": f["_away_name"],
         "started": f.get("started", False), "finished": f.get("finished_provisional", False),
         "minutes": f.get("minutes", 0), "kickoff": f.get("kickoff_time"),
         "hs": f.get("team_h_score"), "as": f.get("team_a_score"),

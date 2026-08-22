@@ -2,9 +2,14 @@ import QtQuick
 import qs.Commons
 import "Fmt.js" as Fmt
 
-// The gameweek's matches, with your own players called out under each one,
-// and — while a match is still running — the bonus race, so you can see who
-// is on course for the 3, 2 and 1 before the game makes it official.
+// The gameweek's matches, laid out like a match card: the two clubs either
+// side of the scoreline, and everything that happened underneath split down
+// the middle, home on the left and away on the right, so you never have to
+// work out which side a goal belongs to.
+//
+// Your own players are called out along the bottom, and while a match is
+// still running the bonus race sits below that — who is on course for the 3,
+// 2 and 1 before the game makes it official.
 Item {
   id: tab
   property var app: null
@@ -20,7 +25,8 @@ Item {
 
     for (var i = 0; i < fixtures.length; i++) {
       var f = fixtures[i]
-      if (!Fmt.matches(f.label, q)) continue
+      if (!Fmt.matches(f.label, q) && !Fmt.matches(f.home_name, q)
+          && !Fmt.matches(f.away_name, q)) continue
 
       var mine = []
       for (var j = 0; j < squad.length; j++) {
@@ -41,233 +47,347 @@ Item {
     id: list
     anchors.fill: parent
     clip: true
-    spacing: Style.spacing.sm
+    spacing: Style.spacing.md
     model: tab.rows
     currentIndex: app ? Math.min(app.selectedIndex, tab.rows.length - 1) : 0
     onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
     boundsBehavior: Flickable.StopAtBounds
 
     delegate: Rectangle {
-      id: matchCard
+      id: card
       required property var modelData
       required property int index
       readonly property bool current: index === list.currentIndex
-      readonly property var fx: matchCard.modelData.fixture
+      readonly property var fx: card.modelData.fixture
+      readonly property bool inPlay: card.fx.started && !card.fx.finished
+
+      // Every event the feed reports, as one list this card can walk twice.
+      readonly property var events: card.fx.detail ? [
+        { label: "goal",   swatch: "", home: card.fx.detail.goals_scored.home, away: card.fx.detail.goals_scored.away },
+        { label: "assist", swatch: "", home: card.fx.detail.assists.home,      away: card.fx.detail.assists.away },
+        { label: "o.g.",   swatch: "", home: card.fx.detail.own_goals.home,    away: card.fx.detail.own_goals.away },
+        { label: "pen missed", swatch: "", home: card.fx.detail.penalties_missed.home, away: card.fx.detail.penalties_missed.away },
+        { label: "",  swatch: "yellow", home: card.fx.detail.yellow_cards.home, away: card.fx.detail.yellow_cards.away },
+        { label: "",  swatch: "red",    home: card.fx.detail.red_cards.home,    away: card.fx.detail.red_cards.away }
+      ] : []
 
       width: list.width
-      height: content.implicitHeight + Style.spacing.md * 2
+      height: body.implicitHeight + Style.spacing.lg * 2
       radius: app ? app.cornerRadius : 0
-      color: current ? (app ? app.selectedBackground : "#222") : Util.alpha(app ? app.foreground : "#fff", 0.03)
+      color: current ? (app ? app.selectedBackground : "#222")
+                     : Util.alpha(app ? app.foreground : "#fff", 0.035)
+      border.width: card.inPlay ? 1 : 0
+      border.color: Util.alpha(app ? app.accent : "#fff", 0.5)
 
       MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: if (app) app.selectedIndex = index
+        onClicked: if (app) app.selectedIndex = card.index
+      }
+
+      // One event line, written outward from the middle: the home side reads
+      // left to right, the away side right to left, so both hug the divider.
+      component EventLine: Item {
+        property var entry: null
+        property bool homeSide: true
+        readonly property var people: entry ? (homeSide ? entry.home : entry.away) : []
+
+        width: parent ? parent.width : 0
+        height: visible ? Math.max(Style.font.bodySmall, Style.space(13)) + Style.space(3) : 0
+        visible: people !== undefined && people.length > 0
+
+        Row {
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.left: homeSide ? parent.left : undefined
+          anchors.right: homeSide ? undefined : parent.right
+          layoutDirection: homeSide ? Qt.LeftToRight : Qt.RightToLeft
+          spacing: Style.spacing.sm
+
+          // A booking is a little card; everything else says what it was.
+          Item {
+            width: entry.swatch === "" ? tagText.implicitWidth : Style.space(7)
+            height: Style.space(13)
+
+            Text {
+              id: tagText
+              visible: entry.swatch === ""
+              anchors.verticalCenter: parent.verticalCenter
+              text: entry.label
+              color: app ? app.fainter : "#888"
+              font.family: app ? app.fontFamily : "monospace"
+              font.pixelSize: Style.font.caption
+            }
+            Rectangle {
+              visible: entry.swatch !== ""
+              anchors.centerIn: parent
+              width: Style.space(7); height: Style.space(10)
+              radius: Style.space(1)
+              color: entry.swatch === "red" ? (app ? app.cardRed : "#c62828")
+                                            : (app ? app.cardYellow : "#e3b505")
+              border.width: 1
+              border.color: app ? app.fixedOutline : "#fff"
+            }
+          }
+
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: {
+              var bits = []
+              for (var i = 0; i < people.length; i++)
+                bits.push(people[i].name + (people[i].count > 1 ? " ×" + people[i].count : ""))
+              return bits.join(", ")
+            }
+            color: app ? app.foreground : "#fff"
+            font.family: app ? app.fontFamily : "monospace"
+            font.pixelSize: Style.font.bodySmall
+          }
+        }
       }
 
       Column {
-        id: content
+        id: body
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: Style.spacing.md
-        spacing: Style.spacing.sm
+        anchors.margins: Style.spacing.lg
+        spacing: Style.spacing.md
 
-        // Scoreline
-        Row {
+        // ---------------------------------------------------- the scoreline
+        Item {
           width: parent.width
-          spacing: Style.spacing.md
+          height: Math.max(Style.font.display, Style.space(30))
 
-          Text {
-            width: Style.space(200)
-            text: fx.label
+          readonly property int sideWidth: (width - Style.space(120) - Style.space(150)) / 2
+
+          Text {                                            // home club
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.sideWidth
+            horizontalAlignment: Text.AlignRight
+            text: card.fx.home_name || card.fx.home
             color: app ? app.foreground : "#fff"
             font.family: app ? app.fontFamily : "monospace"
             font.pixelSize: Style.font.subtitle
             font.bold: true
+            elide: Text.ElideRight
           }
 
-          // Clock: minute while live, FT when done, kickoff time before
-          Rectangle {
+          Text {                                            // score, or "v"
+            anchors.left: parent.left
+            anchors.leftMargin: parent.sideWidth
             anchors.verticalCenter: parent.verticalCenter
-            width: clockText.implicitWidth + Style.spacing.md
-            height: clockText.implicitHeight + Style.space(3)
-            radius: app ? app.cornerRadius : 0
-            color: fx.started && !fx.finished
-                   ? Util.alpha(app ? app.accent : "#fff", 0.22) : "transparent"
-            Text {
-              id: clockText
-              anchors.centerIn: parent
-              text: fx.finished ? "FT"
-                   : fx.started ? (fx.minutes || 0) + "'"
-                   : Fmt.kickoff(fx.kickoff)
-              color: fx.started && !fx.finished ? (app ? app.accent : "#fff")
-                                                : (app ? app.dim : "#aaa")
-              font.family: app ? app.fontFamily : "monospace"
-              font.pixelSize: Style.font.bodySmall
-              font.bold: fx.started && !fx.finished
-            }
-          }
-
-          Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: modelData.mine.length > 0
-                  ? modelData.mine.length + (modelData.mine.length === 1 ? " of yours" : " of yours")
-                  : ""
-            color: app ? app.fainter : "#888"
+            width: Style.space(120)
+            horizontalAlignment: Text.AlignHCenter
+            text: card.fx.started && card.fx.hs !== null
+                    ? card.fx.hs + " – " + card.fx.as : "v"
+            color: card.inPlay ? (app ? app.accent : "#fff") : (app ? app.foreground : "#fff")
             font.family: app ? app.fontFamily : "monospace"
-            font.pixelSize: Style.font.caption
+            font.pixelSize: card.fx.started ? Style.font.display : Style.font.title
+            font.bold: true
+          }
+
+          Text {                                            // away club
+            anchors.left: parent.left
+            anchors.leftMargin: parent.sideWidth + Style.space(120)
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.sideWidth
+            text: card.fx.away_name || card.fx.away
+            color: app ? app.foreground : "#fff"
+            font.family: app ? app.fontFamily : "monospace"
+            font.pixelSize: Style.font.subtitle
+            font.bold: true
+            elide: Text.ElideRight
+          }
+
+          Row {                                             // clock and stake
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.spacing.md
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: card.modelData.mine.length > 0
+                      ? card.modelData.mine.length + " of yours" : ""
+              color: app ? app.fainter : "#888"
+              font.family: app ? app.fontFamily : "monospace"
+              font.pixelSize: Style.font.caption
+            }
+
+            Rectangle {
+              anchors.verticalCenter: parent.verticalCenter
+              width: clockText.implicitWidth + Style.spacing.lg
+              height: clockText.implicitHeight + Style.space(5)
+              radius: app ? app.cornerRadius : 0
+              color: card.inPlay ? Util.alpha(app ? app.accent : "#fff", 0.22)
+                                 : Util.alpha(app ? app.foreground : "#fff", 0.07)
+              Text {
+                id: clockText
+                anchors.centerIn: parent
+                text: card.fx.finished ? "FT"
+                     : card.fx.started ? (card.fx.minutes || 0) + "'"
+                     : Fmt.kickoff(card.fx.kickoff)
+                color: card.inPlay ? (app ? app.accent : "#fff") : (app ? app.dim : "#aaa")
+                font.family: app ? app.fontFamily : "monospace"
+                font.pixelSize: Style.font.bodySmall
+                font.bold: card.inPlay
+              }
+            }
           }
         }
 
-        // Who did what — scorers, assists and cards for both sides.
-        Column {
+        // ------------------------------------------- what happened, by side
+        Item {
           width: parent.width
-          spacing: Style.space(1)
-          visible: matchCard.fx.detail !== null && matchCard.fx.detail !== undefined
+          height: Math.max(homeCol.implicitHeight, awayCol.implicitHeight)
 
-          Repeater {
-            model: matchCard.fx.detail ? [
-              { label: "goal",   swatch: "",        home: matchCard.fx.detail.goals_scored.home, away: matchCard.fx.detail.goals_scored.away },
-              { label: "assist", swatch: "",        home: matchCard.fx.detail.assists.home,      away: matchCard.fx.detail.assists.away },
-              { label: "o.g.",   swatch: "",        home: matchCard.fx.detail.own_goals.home,    away: matchCard.fx.detail.own_goals.away },
-              { label: "",       swatch: "yellow",  home: matchCard.fx.detail.yellow_cards.home, away: matchCard.fx.detail.yellow_cards.away },
-              { label: "",       swatch: "red",     home: matchCard.fx.detail.red_cards.home,    away: matchCard.fx.detail.red_cards.away }
-            ] : []
-
-            delegate: Row {
-              required property var modelData
-              visible: modelData.home.length > 0 || modelData.away.length > 0
-              spacing: Style.spacing.md
-
-              function names(list) {
-                var bits = []
-                for (var i = 0; i < list.length; i++)
-                  bits.push(list[i].name + (list[i].count > 1 ? " ×" + list[i].count : ""))
-                return bits.join(", ")
+          Column {
+            id: homeCol
+            anchors.left: parent.left
+            anchors.top: parent.top
+            width: (parent.width - Style.spacing.xl) / 2
+            spacing: 0
+            Repeater {
+              model: card.events
+              delegate: EventLine {
+                required property var modelData
+                entry: modelData
+                homeSide: true
               }
+            }
+          }
 
-              // A booking is a little card; everything else is a word.
-              Item {
-                width: Style.space(42)
-                height: Style.font.bodySmall
+          Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 1
+            color: app ? app.hairline : "#333"
+          }
+
+          Column {
+            id: awayCol
+            anchors.right: parent.right
+            anchors.top: parent.top
+            width: (parent.width - Style.spacing.xl) / 2
+            spacing: 0
+            Repeater {
+              model: card.events
+              delegate: EventLine {
+                required property var modelData
+                entry: modelData
+                homeSide: false
+              }
+            }
+          }
+        }
+
+        // ------------------------------------------------- your own players
+        Item {
+          width: parent.width
+          height: visible ? mineFlow.implicitHeight + Style.spacing.sm : 0
+          visible: card.modelData.mine.length > 0
+
+          Rectangle {
+            anchors.top: parent.top
+            width: parent.width
+            height: 1
+            color: app ? app.hairline : "#333"
+          }
+
+          Flow {
+            id: mineFlow
+            anchors.top: parent.top
+            anchors.topMargin: Style.spacing.sm
+            width: parent.width
+            spacing: Style.spacing.sm
+
+            Repeater {
+              model: card.modelData.mine
+              delegate: Rectangle {
+                required property var modelData
+                width: pill.implicitWidth + Style.spacing.md
+                height: pill.implicitHeight + Style.space(5)
+                radius: app ? app.cornerRadius : 0
+                color: Util.alpha(app ? app.foreground : "#fff",
+                                  modelData.counting ? 0.10 : 0.04)
 
                 Text {
-                  visible: modelData.swatch === ""
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: modelData.label
-                  color: app ? app.fainter : "#888"
+                  id: pill
+                  anchors.centerIn: parent
+                  text: {
+                    var s = modelData.name
+                    if (modelData.captain) s += " (C)"
+                    if (modelData.benched) s += " [b]"
+                    s += "  " + modelData.applied
+                    if (modelData.provisional) s += " ~" + modelData.provisional
+                    return s
+                  }
+                  color: modelData.counting ? (app ? app.foreground : "#fff")
+                                            : (app ? app.fainter : "#888")
                   font.family: app ? app.fontFamily : "monospace"
-                  font.pixelSize: Style.font.caption
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: modelData.captain
                 }
-                Rectangle {
-                  visible: modelData.swatch !== ""
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: Style.space(7); height: Style.space(10)
-                  radius: Style.space(1)
-                  color: modelData.swatch === "red" ? (app ? app.cardRed : "#c62828")
-                                                    : (app ? app.cardYellow : "#e3b505")
-                  border.width: 1
-                  border.color: app ? app.fixedOutline : "#fff"
-                }
-              }
-              Text {
-                width: Style.space(220)
-                text: parent.names(modelData.home)
-                color: app ? app.dim : "#aaa"
-                font.family: app ? app.fontFamily : "monospace"
-                font.pixelSize: Style.font.bodySmall
-                elide: Text.ElideRight
-              }
-              Text {
-                width: Style.space(220)
-                text: parent.names(modelData.away)
-                color: app ? app.dim : "#aaa"
-                font.family: app ? app.fontFamily : "monospace"
-                font.pixelSize: Style.font.bodySmall
-                elide: Text.ElideRight
               }
             }
           }
         }
 
-        // Your players in this match
-        Flow {
+        // --------------------------------------------------- the bonus race
+        Item {
           width: parent.width
-          spacing: Style.spacing.sm
-          visible: modelData.mine.length > 0
+          height: visible ? raceCol.implicitHeight + Style.spacing.sm : 0
+          visible: card.modelData.race !== null && card.modelData.race !== undefined
 
-          Repeater {
-            model: modelData.mine
-            delegate: Rectangle {
-              required property var modelData
-              width: pill.implicitWidth + Style.spacing.md
-              height: pill.implicitHeight + Style.space(4)
-              radius: app ? app.cornerRadius : 0
-              color: Util.alpha(app ? app.foreground : "#fff", modelData.counting ? 0.09 : 0.04)
+          Rectangle {
+            anchors.top: parent.top
+            width: parent.width
+            height: 1
+            color: app ? app.hairline : "#333"
+          }
 
-              Text {
-                id: pill
-                anchors.centerIn: parent
-                text: {
-                  var s = modelData.name
-                  if (modelData.captain) s += " (C)"
-                  if (modelData.benched) s += " [b]"
-                  s += "  " + modelData.applied
-                  if (modelData.provisional) s += " ~" + modelData.provisional
-                  return s
-                }
-                color: modelData.counting ? (app ? app.foreground : "#fff") : (app ? app.fainter : "#888")
-                font.family: app ? app.fontFamily : "monospace"
-                font.pixelSize: Style.font.bodySmall
-                font.bold: modelData.captain
-              }
+          Column {
+            id: raceCol
+            anchors.top: parent.top
+            anchors.topMargin: Style.spacing.sm
+            width: parent.width
+            spacing: Style.space(2)
+
+            Text {
+              text: "Bonus race"
+              color: app ? app.fainter : "#888"
+              font.family: app ? app.fontFamily : "monospace"
+              font.pixelSize: Style.font.caption
             }
-          }
-        }
 
-        // Bonus race — only while the bonus is still up for grabs
-        Column {
-          width: parent.width
-          spacing: Style.space(2)
-          visible: modelData.race !== null && modelData.race !== undefined
+            Repeater {
+              model: card.modelData.race ? card.modelData.race.rows : []
+              delegate: Row {
+                required property var modelData
+                spacing: Style.spacing.md
 
-          Text {
-            text: "Bonus race"
-            color: app ? app.fainter : "#888"
-            font.family: app ? app.fontFamily : "monospace"
-            font.pixelSize: Style.font.caption
-          }
-
-          Repeater {
-            model: modelData.race ? modelData.race.rows : []
-            delegate: Row {
-              required property var modelData
-              spacing: Style.spacing.md
-
-              Text {
-                width: Style.space(26)
-                text: modelData.bonus > 0 ? "+" + modelData.bonus : ""
-                color: app ? app.accent : "#fff"
-                font.family: app ? app.fontFamily : "monospace"
-                font.pixelSize: Style.font.bodySmall
-                font.bold: true
-              }
-              Text {
-                width: Style.space(140)
-                text: modelData.name + "  " + modelData.team
-                color: app ? app.foreground : "#fff"
-                font.family: app ? app.fontFamily : "monospace"
-                font.pixelSize: Style.font.bodySmall
-                elide: Text.ElideRight
-              }
-              Text {
-                text: modelData.bps + " bps"
-                color: app ? app.dim : "#aaa"
-                font.family: app ? app.fontFamily : "monospace"
-                font.pixelSize: Style.font.bodySmall
+                Text {
+                  width: Style.space(30)
+                  text: modelData.bonus > 0 ? "+" + modelData.bonus : ""
+                  color: app ? app.accent : "#fff"
+                  font.family: app ? app.fontFamily : "monospace"
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                }
+                Text {
+                  width: Style.space(170)
+                  text: modelData.name + "  " + modelData.team
+                  color: app ? app.foreground : "#fff"
+                  font.family: app ? app.fontFamily : "monospace"
+                  font.pixelSize: Style.font.bodySmall
+                  elide: Text.ElideRight
+                }
+                Text {
+                  text: modelData.bps + " bps"
+                  color: app ? app.dim : "#aaa"
+                  font.family: app ? app.fontFamily : "monospace"
+                  font.pixelSize: Style.font.bodySmall
+                }
               }
             }
           }

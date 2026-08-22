@@ -34,14 +34,14 @@ Item {
 
   // Tabs marked `fpl` only exist when you're actually playing the game.
   readonly property var allTabs: [
-    { id: "squad",    label: "Squad",    filter: "Find a player in your squad…", fpl: true },
-    { id: "live",     label: "Live",     filter: "Filter matches…",          fpl: false },
-    { id: "table",    label: "Table",    filter: "Filter clubs…",            fpl: false },
-    { id: "leagues",  label: "Leagues",  filter: "Filter managers…",         fpl: true },
-    { id: "fixtures", label: "Fixtures", filter: "Filter clubs…",            fpl: false },
-    { id: "players",  label: "Players",  filter: "Search players…",          fpl: false },
+    { id: "squad",    label: "Squad",    filter: "",                         fpl: true,  filterable: false },
+    { id: "live",     label: "Live",     filter: "Filter matches…",          fpl: false, filterable: true },
+    { id: "table",    label: "Table",    filter: "Filter clubs…",            fpl: false, filterable: true },
+    { id: "leagues",  label: "Leagues",  filter: "Filter managers…",         fpl: true,  filterable: true },
+    { id: "fixtures", label: "Fixtures", filter: "Filter clubs…",            fpl: false, filterable: true },
+    { id: "players",  label: "Players",  filter: "Search players…",          fpl: false, filterable: true },
     { id: "news",     label: "News",     filter: root.statto ? "Filter team news…"
-                                                             : "Filter news and prices…", fpl: false }
+                                                             : "Filter news and prices…", fpl: false, filterable: true }
   ]
   readonly property var tabs: {
     var out = []
@@ -50,6 +50,7 @@ Item {
     return out
   }
   readonly property string tab: tabs[Math.min(tabIndex, tabs.length - 1)].id
+  readonly property bool filterable: tabs[Math.min(tabIndex, tabs.length - 1)].filterable === true
 
   // ------------------------------------------------------------------ state
   property var state: ({})
@@ -223,10 +224,23 @@ Item {
     root.anchorX = anchor
     root.filterText = ""
     root.selectedIndex = 0
+    // Always open where the mode's answer is, not wherever you happened to
+    // wander last time: the squad in FPL mode, the live scores in statto.
+    root.tabIndex = 0
     root.view = root.gsettings.greeted === true ? "list" : "greeter"
     if (root.view === "greeter") { root.greetStep = 0; root.syncDrafts() }
     root.refreshNow()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  }
+
+  // The shell can raise the overlay by setting `opened` directly rather than
+  // calling open(), so the reset hangs off the property itself. That way it
+  // happens however the overlay was summoned — bar icon, hotkey or IPC.
+  onOpenedChanged: {
+    if (!root.opened) return
+    root.tabIndex = 0
+    root.filterText = ""
+    root.selectedIndex = 0
   }
 
   function dismiss() {
@@ -565,7 +579,7 @@ Item {
             event.accepted = true
           } else if (event.key === Qt.Key_Backspace) {
             root.setFilter(root.filterText.slice(0, -1)); event.accepted = true
-          } else if (event.text && event.text.length === 1
+          } else if (root.filterable && event.text && event.text.length === 1
                      && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127) {
             root.setFilter(root.filterText + event.text); event.accepted = true
           }
@@ -760,9 +774,11 @@ Item {
 
         // ----------------------------------------------------- filter field
         Rectangle {
-          visible: root.view === "list"
+          visible: root.view === "list" && root.filterable
           width: parent.width
-          height: Math.max(Style.space(26), Style.font.body + Style.spacing.inputPaddingY * 2)
+          height: visible
+                  ? Math.max(Style.space(26), Style.font.body + Style.spacing.inputPaddingY * 2)
+                  : 0
           radius: root.cornerRadius
           color: Util.alpha(root.foreground, 0.05)
 
