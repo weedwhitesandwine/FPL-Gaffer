@@ -27,6 +27,11 @@ FILES=(manifest.json qmldir Gaffer.qml GafferState.qml BarWidget.qml Fmt.js
        PlayersTab.qml NewsTab.qml SettingsView.qml
        gafferd.py gaffer-ctl.sh README.md LICENSE)
 
+# Shipped if present, skipped without complaint if not. preview.png is the
+# catalogue thumbnail; it is a convention rather than anything the shell
+# reads, so its absence must never fail an install.
+OPTIONAL_FILES=(preview.png)
+
 usage() {
   cat <<USAGE
 FPL Gaffer installer
@@ -114,7 +119,9 @@ fi
 
 echo "FPL Gaffer will write to exactly two places:"
 echo
-echo "  1. Plugin code — ${#FILES[@]} files"
+present_optional=0
+for f in "${OPTIONAL_FILES[@]}"; do [[ -f "$SRC/$f" ]] && present_optional=$((present_optional + 1)); done
+echo "  1. Plugin code — $(( ${#FILES[@]} + present_optional )) files"
 echo "      $PLUGIN_DIR"
 if [[ $UPGRADE -eq 1 ]]; then
   echo "      — a copy already exists there; it will be moved to"
@@ -145,6 +152,9 @@ STAGE="$(mktemp -d "${TMPDIR:-/tmp}/gaffer-install.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
 for f in "${FILES[@]}"; do cp "$SRC/$f" "$STAGE/$f"; done
+for f in "${OPTIONAL_FILES[@]}"; do
+  [[ -f "$SRC/$f" ]] && cp "$SRC/$f" "$STAGE/$f"
+done
 chmod +x "$STAGE/gaffer-ctl.sh" "$STAGE/gafferd.py"
 
 mkdir -p "$(dirname "$PLUGIN_DIR")"
