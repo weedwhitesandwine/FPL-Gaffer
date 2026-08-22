@@ -86,6 +86,12 @@ TTL = {
     "live": (50, 3600),
     "entry": (240, 1800),
     "picks": (240, 1800),
+    # A squad is locked the moment the deadline passes, so every other
+    # manager's team is identical for the rest of the gameweek. Their live
+    # scores come from the gameweek feed, which is fetched once a cycle
+    # regardless — so re-reading their picks every minute was fetching
+    # something that cannot change. Held for the length of a gameweek.
+    "picks_locked": (21600, 21600),
     "history": (600, 3600),
     "status": (120, 900),
     "league": (300, 1800),
@@ -770,7 +776,10 @@ def fetch_league(league_id, live, cap, players, live_stats, prov, entry_id, summ
     if live and rows and len(rows) <= cap:
         gw = live_stats.get("_gw")
         for row in rows:
-            picks = fetch("/entry/%d/event/%d/picks/" % (row["entry"], gw), "picks", live)
+            # Your own team stays on the short cache; everyone else's is
+            # locked and read once.
+            picks = fetch("/entry/%d/event/%d/picks/" % (row["entry"], gw),
+                          "picks" if row["entry"] == entry_id else "picks_locked", live)
             if not picks:
                 continue
             score, chip = score_picks(picks, live_stats, prov, players)
