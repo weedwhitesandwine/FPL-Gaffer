@@ -27,10 +27,25 @@ Item {
   readonly property var rows: {
     var out = []
     var source = (grid.rows || []).slice()
+    var dir = tab.sortAsc ? 1 : -1
+    var key = tab.sortKey
     source.sort(function(a, b) {
-      var an = String(a.name || "").toLowerCase()
-      var bn = String(b.name || "").toLowerCase()
-      return an < bn ? -1 : (an > bn ? 1 : 0)
+      if (key === "club") {
+        var an = String(a.name || "").toLowerCase()
+        var bn = String(b.name || "").toLowerCase()
+        return (an < bn ? -1 : (an > bn ? 1 : 0)) * dir
+      }
+      if (key === "avg") {
+        var av = a.games > 0 ? a.avg : 99
+        var bv = b.games > 0 ? b.avg : 99
+        if (av === bv) return String(a.name).localeCompare(String(b.name))
+        return (av - bv) * dir
+      }
+      var gw = parseInt(key.replace("gw", ""))
+      var ag = tab.gwValue(a, gw)
+      var bg = tab.gwValue(b, gw)
+      if (ag === bg) return String(a.name).localeCompare(String(b.name))
+      return (ag - bg) * dir
     })
     for (var i = 0; i < source.length; i++) {
       var r = source[i]
@@ -43,46 +58,104 @@ Item {
   readonly property int cellWidth: Math.max(Style.space(52),
     (width - Style.space(190)) / Math.max(1, (grid.gameweeks || []).length))
 
+  // Click any heading to rank by it — the club name, the average difficulty
+  // of the whole run, or the difficulty of a single gameweek — and click the
+  // same one again to reverse it. Ranking by one week answers a real
+  // question: who has the kind fixture the week I need a captain.
+  property string sortKey: "club"
+  property bool sortAsc: true
+
+  // A club not playing that week sorts last however you order it: a blank is
+  // not an easy fixture, it is no fixture. A double counts as the average of
+  // its two games.
+  function gwValue(row, gw) {
+    var weeks = tab.grid.gameweeks || []
+    var idx = weeks.indexOf(gw)
+    if (idx < 0) return 99
+    var cell = row.cells[idx]
+    if (!cell || cell.length === 0) return 99
+    var total = 0
+    for (var i = 0; i < cell.length; i++) total += cell[i].fdr
+    return total / cell.length
+  }
+
+  function sortOn(key) {
+    if (tab.sortKey === key) tab.sortAsc = !tab.sortAsc
+    else { tab.sortKey = key; tab.sortAsc = true }
+    if (app) app.selectedIndex = 0
+  }
+
   function activate(index) {}
 
   Column {
     anchors.fill: parent
     spacing: Style.spacing.sm
 
-    // Gameweek headings
+    // Headings — these are the sort control.
     Item {
       width: parent.width
-      height: Style.font.caption + Style.spacing.sm
+      height: Math.max(Style.space(20), Style.font.caption + Style.spacing.sm)
+
+      // One heading: its label, an arrow when it is the one in charge, and a
+      // click target that covers the whole cell rather than just the word.
+      component Heading: Item {
+        property string label: ""
+        property string sortId: ""
+        property bool alignRight: false
+        property bool centre: false
+        readonly property bool active: tab.sortKey === sortId
+
+        height: parent ? parent.height : 0
+
+        Row {
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.left: (alignRight || centre) ? undefined : parent.left
+          anchors.right: alignRight ? parent.right : undefined
+          anchors.horizontalCenter: centre ? parent.horizontalCenter : undefined
+          spacing: Style.space(2)
+
+          Text {
+            text: parent.parent.label
+            color: parent.parent.active ? (app ? app.accent : "#fff")
+                                        : (app ? app.fainter : "#888")
+            font.family: app ? app.fontFamily : "monospace"
+            font.pixelSize: Style.font.caption
+            font.bold: parent.parent.active
+          }
+          Text {
+            visible: parent.parent.active
+            text: tab.sortAsc ? "▲" : "▼"
+            color: app ? app.accent : "#fff"
+            font.family: app ? app.fontFamily : "monospace"
+            font.pixelSize: Style.font.caption
+          }
+        }
+
+        MouseArea {
+          anchors.fill: parent
+          anchors.topMargin: -Style.space(3)
+          anchors.bottomMargin: -Style.space(3)
+          cursorShape: Qt.PointingHandCursor
+          onClicked: tab.sortOn(parent.sortId)
+        }
+      }
+
       Row {
         anchors.fill: parent
         anchors.leftMargin: Style.spacing.rowPaddingX
         spacing: 0
 
-        Text {
-          width: Style.space(140)
-          text: "CLUB"
-          color: app ? app.fainter : "#888"
-          font.family: app ? app.fontFamily : "monospace"
-          font.pixelSize: Style.font.caption
-        }
-        Text {
-          width: Style.space(46)
-          horizontalAlignment: Text.AlignRight
-          text: "AVG"
-          color: app ? app.fainter : "#888"
-          font.family: app ? app.fontFamily : "monospace"
-          font.pixelSize: Style.font.caption
-        }
+        Heading { width: Style.space(140); label: "CLUB"; sortId: "club" }
+        Heading { width: Style.space(46);  label: "AVG";  sortId: "avg"; alignRight: true }
+
         Repeater {
           model: tab.grid.gameweeks || []
-          delegate: Text {
+          delegate: Heading {
             required property var modelData
             width: tab.cellWidth
-            horizontalAlignment: Text.AlignHCenter
-            text: "GW" + modelData
-            color: app ? app.fainter : "#888"
-            font.family: app ? app.fontFamily : "monospace"
-            font.pixelSize: Style.font.caption
+            label: "GW" + modelData
+            sortId: "gw" + modelData
+            centre: true
           }
         }
       }
@@ -120,8 +193,12 @@ Item {
           anchors.leftMargin: Style.spacing.rowPaddingX
           spacing: 0
 
-          Row {
+          Item {
             width: Style.space(140)
+            height: Style.font.body
+            anchors.verticalCenter: parent.verticalCenter
+            Row {
+            anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.spacing.sm
             Text {
@@ -141,6 +218,7 @@ Item {
               font.family: app ? app.fontFamily : "monospace"
               font.pixelSize: Style.font.caption
             }
+            }
           }
 
           Text {
@@ -148,6 +226,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
             text: modelData.games > 0 ? Number(modelData.avg).toFixed(1) : "—"
+            font.bold: tab.sortKey === "avg"
             color: app ? app.dim : "#aaa"
             font.family: app ? app.fontFamily : "monospace"
             font.pixelSize: Style.font.bodySmall

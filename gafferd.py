@@ -870,11 +870,15 @@ def refresh(settings, previous):
     state["next_kickoff"] = upcoming[0]["kickoff_time"] if upcoming else None
     state["next_match"] = upcoming[0]["_label"] if upcoming else None
 
+    # The grid starts at the gameweek being played, not the one after it. A
+    # week with matches still to come is the week you are planning around.
+    gw_done = all(f.get("finished_provisional") for f in gw_fixtures) if gw_fixtures else True
+    grid_start = (nxt["id"] if (gw_done and nxt) else gw)
+
     state["bonus_races"] = bonus_races(gw_fixtures, players)
     state["league_table"] = build_league_table(all_fixtures, teams)
     state["grid"] = build_fixture_grid(
-        all_fixtures, teams,
-        (nxt["id"] if nxt else gw), int(settings.get("fixtureWeeks") or 6))
+        all_fixtures, teams, grid_start, int(settings.get("fixtureWeeks") or 6))
 
     owned = {r["id"] for r in state.get("squad", [])}
     watch = (set(settings.get("watchlist") or []) | owned) if mode == "gaffer" else set()
