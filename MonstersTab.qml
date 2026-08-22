@@ -3,7 +3,7 @@ import qs.Commons
 import "Fmt.js" as Fmt
 
 // Monsters — a bit of fun. Nine ways to be remarkable, each with a podium of
-// three. Ported from the categories Neil's earlier FPL Gaffer used.
+// three. Ported from the categories an earlier FPL Gaffer app used.
 //
 // The medals are fixed colours, like the cards and the difficulty ramp:
 // gold, silver and bronze mean the same thing in every theme, and each

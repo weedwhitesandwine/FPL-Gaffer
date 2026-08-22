@@ -599,7 +599,7 @@ def match_detail(fx, players):
 
 
 # The monsters board: a podium of three for each of nine ways to be
-# remarkable. Ported from the categories Neil's earlier FPL Gaffer used,
+# remarkable. Ported from the categories an earlier FPL Gaffer app used,
 # with one substitution — fouls committed are not in the public API, so the
 # foul-happy category runs on bookings instead, which amounts to the same
 # accusation.
