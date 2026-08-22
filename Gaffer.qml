@@ -427,9 +427,15 @@ Item {
   // text input, so Ctrl+V has to be handled explicitly. It takes a number,
   // and that is all: no scraping a number out of whatever else happens to be
   // on the clipboard.
+  // The clipboard is whatever the user last copied, which may be a great deal
+  // more than a team ID, and StdioCollector has no limit of its own — it would
+  // hold all of it in the shell before the test below rejected it. `head -c`
+  // puts the ceiling at the read, the same as everywhere else in the plugin:
+  // 64 bytes is far more than the ten digits this can possibly accept, and
+  // anything longer arrives cut off and fails the test.
   Process {
     id: pasteProc
-    command: ["wl-paste", "--no-newline"]
+    command: ["bash", "-c", "wl-paste --no-newline | head -c 64"]
     stdout: StdioCollector {
       id: pasteOut
       waitForEnd: true
