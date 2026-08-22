@@ -1,9 +1,15 @@
 # FPL Gaffer
 
-A Fantasy Premier League dashboard for the [Omarchy](https://omarchy.org) shell.
-Live scores, provisional bonus, the real Premier League table, mini-leagues,
-a fixture difficulty grid and a player explorer — all of it wearing your
-current Omarchy theme.
+**The ultimate dashboard for Premier League fans - FPL mode for players and
+Fan mode for everyone else.**
+
+A Premier League and Fantasy Premier League dashboard for the
+[Omarchy](https://omarchy.org) shell. Live scores, the real league table, a
+fixture difficulty grid, player stats and a podium board — and, if you play
+the game, your squad scored live with provisional bonus, projected auto-subs
+and your mini-leagues. All of it wearing your current Omarchy theme.
+
+![FPL Gaffer](preview.png)
 
 Two ways to use it, chosen on first run and changeable in settings:
 

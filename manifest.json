@@ -5,7 +5,7 @@
   "version": "0.2.0",
   "author": "weedwhitesandwine",
   "license": "MIT",
-  "description": "Live Premier League scores, table and fixtures \u2014 plus a full Fantasy Premier League dashboard if you play",
+  "description": "The ultimate dashboard for Premier League fans - FPL mode for players and Fan mode for everyone else",
   "kinds": [
     "overlay",
     "bar-widget"
