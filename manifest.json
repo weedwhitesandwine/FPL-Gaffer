@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.weedwhitesandwine.gaffer",
+  "name": "FPL Gaffer",
+  "version": "0.1.0",
+  "author": "weedwhitesandwine",
+  "license": "MIT",
+  "description": "Fantasy Premier League dashboard — live scores, provisional bonus, league tables and fixtures",
+  "kinds": ["overlay", "bar-widget"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Gaffer.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "FPL Gaffer",
+    "description": "Live Fantasy Premier League score, or the countdown to the next deadline",
+    "category": "Information",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
