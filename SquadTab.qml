@@ -126,7 +126,7 @@ Item {
       return !!sel && sel.id === p.id
     }
 
-    width: compact ? Style.space(104) : Style.space(124)
+    width: compact ? Style.space(146) : Style.space(152)
     height: cardCol.implicitHeight + Style.spacing.sm * 2
     radius: app ? Math.max(app.cornerRadius, Style.space(3)) : 0
     color: selected ? (app ? app.shirtLit : "#2a9b5e") : (app ? app.shirt : "#1c7a48")
@@ -142,7 +142,9 @@ Item {
 
     Column {
       id: cardCol
-      anchors.centerIn: parent
+      anchors.top: parent.top
+      anchors.topMargin: Style.spacing.sm
+      anchors.horizontalCenter: parent.horizontalCenter
       width: pc.width - Style.spacing.sm * 2
       spacing: Style.space(1)
 
@@ -156,7 +158,7 @@ Item {
           color: pc.p && pc.p.applied > 0 ? (app ? app.shirtText : "#fff")
                                           : (app ? app.shirtSubtle : "#c9e8d6")
           font.family: app ? app.fontFamily : "monospace"
-          font.pixelSize: Style.font.heading
+          font.pixelSize: Style.font.display
           font.bold: true
         }
         Text {
@@ -181,7 +183,7 @@ Item {
                                         : (app ? app.cardRed : "#c62828"))
                  : (app ? app.shirtText : "#fff")
         font.family: app ? app.fontFamily : "monospace"
-        font.pixelSize: Style.font.bodySmall
+        font.pixelSize: Style.font.subtitle
         font.bold: pc.p && pc.p.captain
         elide: Text.ElideRight
       }
@@ -197,54 +199,63 @@ Item {
         }
         color: app ? app.shirtSubtle : "#c9e8d6"
         font.family: app ? app.fontFamily : "monospace"
-        font.pixelSize: Style.font.caption
+        font.pixelSize: Style.font.bodySmall
         font.bold: pc.p && pc.p.live
         elide: Text.ElideRight
       }
 
-      // Availability — fixed amber for a doubt, fixed red for an out,
-      // outlined so it reads on any theme. Given its own line so it can
-      // never crowd the kick-off time above it.
-      Rectangle {
-        visible: tab.flag(pc.p) !== ""
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: flagText.implicitWidth + Style.space(8)
-        height: visible ? flagText.implicitHeight + Style.space(3) : 0
-        radius: Style.space(2)
-        color: tab.flagColor(pc.p)
-        border.width: 1
-        border.color: app ? app.fixedOutline : "#fff"
+      // The bottom line is always present, so every card is the same
+      // height whether or not this player has anything to report. It shows
+      // availability if there is a doubt — that outranks everything — and
+      // otherwise what he has actually done.
+      Item {
+        width: parent.width
+        height: Math.max(flagText.implicitHeight + Style.space(3),
+                         returnsText.implicitHeight)
+
+        Rectangle {
+          visible: tab.flag(pc.p) !== ""
+          anchors.centerIn: parent
+          width: flagText.implicitWidth + Style.space(8)
+          height: flagText.implicitHeight + Style.space(3)
+          radius: Style.space(2)
+          color: tab.flagColor(pc.p)
+          border.width: 1
+          border.color: app ? app.fixedOutline : "#fff"
+
+          Text {
+            id: flagText
+            anchors.centerIn: parent
+            text: tab.flag(pc.p)
+            color: pc.p && pc.p.status === "d" ? "#12100a" : "#ffffff"
+            font.family: app ? app.fontFamily : "monospace"
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+          }
+        }
 
         Text {
-          id: flagText
+          id: returnsText
+          visible: tab.flag(pc.p) === ""
           anchors.centerIn: parent
-          text: tab.flag(pc.p)
-          color: pc.p && pc.p.status === "d" ? "#12100a" : "#ffffff"
+          width: parent.width
+          horizontalAlignment: Text.AlignHCenter
+          text: {
+            if (!pc.p) return ""
+            var bits = []
+            if (pc.p.goals) bits.push(pc.p.goals + "G")
+            if (pc.p.assists) bits.push(pc.p.assists + "A")
+            if (pc.p.cs) bits.push("CS")
+            if (pc.p.saves >= 3) bits.push(pc.p.saves + "SV")
+            if (pc.p.red) bits.push("RC")
+            return bits.join(" ")
+          }
+          color: pc.p && pc.p.red ? (app ? app.cardRed : "#c62828")
+                                  : (app ? app.shirtSubtle : "#c9e8d6")
           font.family: app ? app.fontFamily : "monospace"
-          font.pixelSize: Style.font.caption
-          font.bold: true
+          font.pixelSize: Style.font.bodySmall
+          elide: Text.ElideRight
         }
-      }
-
-      // what he actually did — only when there's something to say
-      Text {
-        visible: text !== ""
-        width: parent.width
-        horizontalAlignment: Text.AlignHCenter
-        text: {
-          if (!pc.p) return ""
-          var bits = []
-          if (pc.p.goals) bits.push(pc.p.goals + "G")
-          if (pc.p.assists) bits.push(pc.p.assists + "A")
-          if (pc.p.cs) bits.push("CS")
-          if (pc.p.saves >= 3) bits.push(pc.p.saves + "SV")
-          if (pc.p.red) bits.push("RC")
-          return bits.join(" ")
-        }
-        color: pc.p && pc.p.red ? (app ? app.cardRed : "#c62828")
-                                : (app ? app.shirtSubtle : "#c9e8d6")
-        font.family: app ? app.fontFamily : "monospace"
-        font.pixelSize: Style.font.caption
       }
     }
 
@@ -254,7 +265,7 @@ Item {
       anchors.right: parent.right
       anchors.top: parent.top
       anchors.margins: Style.space(3)
-      width: Style.space(14); height: Style.space(14)
+      width: Style.space(18); height: Style.space(18)
       radius: width / 2
       color: pc.p && pc.p.captain ? "#ffffff" : "transparent"
       border.width: pc.p && pc.p.vice ? 1 : 0
@@ -264,7 +275,7 @@ Item {
         text: pc.p && pc.p.captain ? "C" : "V"
         color: pc.p && pc.p.captain ? (app ? app.turf : "#0a3a20") : "#ffffff"
         font.family: app ? app.fontFamily : "monospace"
-        font.pixelSize: Style.font.caption
+        font.pixelSize: Style.font.bodySmall
         font.bold: true
       }
     }
@@ -451,14 +462,18 @@ Item {
       height: parent.height - y
       visible: tab.layout === "pitch"
 
-      readonly property int benchHeight: Style.space(118)
+      // The bench stands beside the pitch rather than under it. The pitch
+      // has width to spare and no height to spare, so this trade buys the
+      // eleven a great deal of room and costs the four almost nothing.
+      readonly property int benchWidth: Style.space(174)
 
       Rectangle {
         id: pitch
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        height: parent.height - pitchArea.benchHeight - Style.spacing.sm
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: pitchArea.benchWidth + Style.spacing.sm
         radius: app ? app.cornerRadius : 0
         // Fixed green, on purpose. A pitch drawn in theme colours stops
         // reading as a pitch, and the cards need a known background to be
@@ -557,28 +572,29 @@ Item {
 
       // Bench
       Rectangle {
-        anchors.left: parent.left
         anchors.right: parent.right
+        anchors.top: parent.top
         anchors.bottom: parent.bottom
-        height: pitchArea.benchHeight
+        width: pitchArea.benchWidth
         radius: app ? app.cornerRadius : 0
         color: app ? app.dugout : "#08301b"
 
         Text {
-          anchors.left: parent.left
+          id: benchLabel2
+          anchors.horizontalCenter: parent.horizontalCenter
           anchors.top: parent.top
-          anchors.margins: Style.spacing.sm
-          text: "BENCH" + (tab.st.chip === "bboost" ? "  ·  boosted, all counting" : "")
+          anchors.topMargin: Style.spacing.sm
+          text: "BENCH" + (tab.st.chip === "bboost" ? " · BOOSTED" : "")
           color: app ? app.shirtSubtle : "#c9e8d6"
           font.family: app ? app.fontFamily : "monospace"
           font.pixelSize: Style.font.caption
           font.bold: tab.st.chip === "bboost"
         }
 
-        Row {
+        Column {
           anchors.horizontalCenter: parent.horizontalCenter
-          anchors.bottom: parent.bottom
-          anchors.bottomMargin: Style.spacing.sm
+          anchors.top: benchLabel2.bottom
+          anchors.topMargin: Style.spacing.md
           spacing: Style.spacing.md
           Repeater {
             model: tab.bench
