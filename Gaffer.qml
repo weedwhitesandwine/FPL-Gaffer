@@ -273,6 +273,13 @@ Item {
     root.tabIndex = 0
     root.filterText = ""
     root.selectedIndex = 0
+    // Never reopen onto the settings screen. Its drafts were taken the last
+    // time it was opened, so coming back to it later and pressing Enter
+    // would save stale values — silently changing the mode, among other
+    // things. Always return to the list, with drafts freshly synced.
+    root.view = root.gsettings.greeted === true ? "list" : "greeter"
+    root.greetStep = 0
+    root.syncDrafts()
   }
 
   function dismiss() {
