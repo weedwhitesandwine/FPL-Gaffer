@@ -70,7 +70,7 @@ have to read the source to find that out.
 | `bash gaffer-ctl.sh bar …` | only when you change the bar setting in settings |
 | `bash gaffer-ctl.sh bind`/`unbind` | only when you change the hotkey in settings |
 | `hyprctl reload` | only from those two, after editing the hotkey block |
-| `pkill -f "gafferd.py daemon"` | only from `gaffer-ctl.sh stop`, which you run |
+| `kill <recorded pid>` | only from `gaffer-ctl.sh stop`, which you run — it kills the pid in its own lock file after checking that pid really is the engine, never a name pattern |
 
 Nothing else. No package manager, no installer, no downloader, no shell
 pipeline built from remote data.
@@ -97,9 +97,14 @@ process.
 **Network: yes, and this is the point of it.** Two hosts, plain HTTPS GET,
 unauthenticated and read-only:
 
-- `fantasy.premierleague.com` — the game's own public API, for everything.
-- `footballapi.pulselive.com` — the Premier League's own feed, for one field
-  the fantasy API does not publish: the name of a match referee.
+- `fantasy.premierleague.com` — the game's own public API, for everything the
+  fantasy game owns: points, bonus, prices, ownership, your team, your
+  mini-leagues, injuries and team news, and fixture difficulty.
+- `footballapi.pulselive.com` — the Premier League's own feed, for the football
+  itself: the match clock, live scores, goals, bookings and the referee. The
+  fantasy API runs two to four minutes behind the match on all of these and
+  publishes bookings late or not at all, so where the league reports something
+  directly, its version is used. Only matches actually in play are looked up.
 
 Nothing is ever uploaded, posted or reported. Your team number is used only to
 build the URL of your own public team page. There is no account, no key, no
