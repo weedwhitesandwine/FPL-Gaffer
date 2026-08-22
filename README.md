@@ -67,10 +67,12 @@ have to read the source to find that out.
 | `setpriv --pdeathsig TERM python3 gafferd.py daemon` | started by the shell when the plugin loads; the pdeathsig means it cannot outlive the shell |
 | `python3 gafferd.py once` | one refresh, when you open the overlay or press Ctrl+R |
 | `notify-send` | only to raise a notification you have switched on |
+| `wl-paste --no-newline` | only when you press paste in the team-ID field during setup; it reads the clipboard once and keeps the value only if it is a plain number |
 | `bash gaffer-ctl.sh bar …` | only when you change the bar setting in settings |
 | `bash gaffer-ctl.sh bind`/`unbind` | only when you change the hotkey in settings |
 | `hyprctl reload` | only from those two, after editing the hotkey block |
 | `kill <recorded pid>` | only from `gaffer-ctl.sh stop`, which you run — it kills the pid in its own lock file after checking that pid really is the engine, never a name pattern |
+| `bash -c` writing one file | when you change a setting or resize the window — it writes `settings.json` or the size file inside `~/.local/state/gaffer`. Values are passed as positional arguments (`--`, then `"$1"`/`"$2"`), never interpolated into the shell string |
 
 Nothing else. No package manager, no installer, no downloader, no shell
 pipeline built from remote data.
@@ -80,7 +82,7 @@ pipeline built from remote data.
 | Path | When |
 | --- | --- |
 | its own plugin folder | never, after `omarchy plugin add` clones it |
-| `~/.local/state/gaffer/` — settings, state, cache, log, backups | continuously, while running |
+| `~/.local/state/gaffer/` — settings, state, cache, log | continuously, while running |
 | `~/.config/hypr/bindings.lua` | **only if you set a hotkey**, and only inside its own marked block, leaving every other line untouched |
 | `~/.config/omarchy/shell.json` | **only if you turn the bar readout on or off**, and only its own entry |
 
@@ -172,7 +174,6 @@ somebody else, you have copied the wrong number.
 | `~/.local/state/gaffer/bar.json` | the small slice the bar icon reads |
 | `~/.local/state/gaffer/settings.json` | your choices |
 | `~/.local/state/gaffer/cache/` | raw API responses |
-| `~/.local/state/gaffer/backups/` | previous versions, kept on upgrade |
 | `~/.local/state/gaffer/gafferd.log` | engine log |
 
 `gaffer-ctl.sh stop` stops the background engine, and
