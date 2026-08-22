@@ -76,6 +76,13 @@ Ui.BarWidget {
     onTriggered: root.tick++
   }
 
+  // The bar tooltip is drawn by Omarchy's own button, whose text element
+  // leaves Qt to guess whether a string is plain writing or markup. The
+  // captain's name in there comes from the internet, so strip anything that
+  // could be read as a tag before it reaches a renderer we do not own.
+  // Everything the overlay draws itself is pinned to plain text at source.
+  function plain(s) { return String(s).replace(/[<>]/g, "") }
+
   Ui.BarIconButton {
     id: button
     anchors.fill: parent
@@ -87,7 +94,7 @@ Ui.BarWidget {
         var s = ["Gameweek " + root.barData.gw]
         if (root.barData.live_matches > 0) s.push(root.barData.live_matches + " match(es) in play")
         else if (root.barData.next_kickoff) s.push("Next kick-off " + Fmt.kickoff(root.barData.next_kickoff))
-        return s.join("\n")
+        return root.plain(s.join("\n"))
       }
       var bits = ["GW" + root.barData.gw + ": " + root.barData.points + " points"]
       if (root.barData.provisional) bits.push("includes provisional bonus")
@@ -96,7 +103,7 @@ Ui.BarWidget {
                                       + " on " + root.barData.captain_points)
       if (root.barData.rank) bits.push("Overall rank " + Fmt.commas(root.barData.rank))
       if (root.barData.deadline_in) bits.push("Deadline in " + Fmt.countdown(root.barData.deadline_in))
-      return bits.join("\n")
+      return root.plain(bits.join("\n"))
     }
     onPressed: function(b) {
       if (!GafferState.overlay) return

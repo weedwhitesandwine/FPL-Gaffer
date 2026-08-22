@@ -117,6 +117,7 @@ Item {
                 height: Style.font.heading
 
                 Text {
+                  textFormat: Text.PlainText
                   visible: String(panel.modelData.swatch || "") === ""
                   anchors.left: parent.left
                   anchors.verticalCenter: parent.verticalCenter
@@ -170,6 +171,7 @@ Item {
                 spacing: Style.space(1)
 
                 Text {
+                  textFormat: Text.PlainText
                   width: parent.width
                   text: panel.modelData.title
                   color: app ? app.foreground : "#fff"
@@ -179,6 +181,7 @@ Item {
                   elide: Text.ElideRight
                 }
                 Text {
+                  textFormat: Text.PlainText
                   width: parent.width
                   text: panel.modelData.blurb
                   color: app ? app.dim : "#aaa"
@@ -189,6 +192,7 @@ Item {
               }
 
               Text {
+                textFormat: Text.PlainText
                 id: statTag
                 anchors.right: parent.right
                 anchors.top: parent.top
@@ -252,6 +256,7 @@ Item {
                   // An empty step still shows its number, and the first one
                   // of an untroubled category says so in words.
                   Text {
+                    textFormat: Text.PlainText
                     visible: place.empty
                     anchors.left: parent.left
                     anchors.leftMargin: Style.spacing.md
@@ -265,6 +270,7 @@ Item {
                     font.bold: true
                   }
                   Text {
+                    textFormat: Text.PlainText
                     visible: place.empty
                     anchors.left: parent.left
                     anchors.leftMargin: Style.spacing.md + Style.space(24)
@@ -283,6 +289,7 @@ Item {
                     spacing: Style.spacing.sm
 
                     Text {
+                      textFormat: Text.PlainText
                       width: Style.space(16)
                       anchors.verticalCenter: parent.verticalCenter
                       text: String(place.index + 1)
@@ -293,6 +300,7 @@ Item {
                     }
 
                     Text {
+                      textFormat: Text.PlainText
                       anchors.verticalCenter: parent.verticalCenter
                       text: String((place.modelData || {}).name || "")
                       color: app ? app.foreground : "#fff"
@@ -304,6 +312,7 @@ Item {
                     }
 
                     Text {
+                      textFormat: Text.PlainText
                       anchors.verticalCenter: parent.verticalCenter
                       text: String((place.modelData || {}).team || "") + " "
                             + String((place.modelData || {}).pos || "")
@@ -315,6 +324,7 @@ Item {
                     // Set-piece duties spell themselves out; everything else
                     // is a number.
                     Text {
+                      textFormat: Text.PlainText
                       visible: !place.empty
                                && String((place.modelData || {}).duties || "") !== ""
                       anchors.verticalCenter: parent.verticalCenter
@@ -327,6 +337,7 @@ Item {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     visible: !place.empty
                     anchors.right: parent.right
                     anchors.rightMargin: Style.spacing.md
@@ -351,6 +362,7 @@ Item {
 
   // A standing note, so an empty board early in a season explains itself.
   Text {
+    textFormat: Text.PlainText
     anchors.bottom: parent.bottom
     anchors.left: parent.left
     visible: (tab.board.categories || []).length === 0

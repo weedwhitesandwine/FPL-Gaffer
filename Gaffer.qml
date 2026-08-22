@@ -716,6 +716,7 @@ Item {
               spacing: Style.space(2)
 
               Text {
+                textFormat: Text.PlainText
                 text: root.statto ? "Premier League" : (root.state.team_name || "FPL Gaffer")
                 color: root.foreground
                 font.family: root.fontFamily
@@ -725,6 +726,7 @@ Item {
                 width: parent.width
               }
               Text {
+                textFormat: Text.PlainText
                 text: {
                   if (root.needsSetup) return "No team linked yet — press Ctrl+, to set one"
                   if (root.statto) {
@@ -764,6 +766,7 @@ Item {
                 anchors.right: parent.right
 
                 Text {
+                  textFormat: Text.PlainText
                   text: root.statto
                           ? String(root.state.live_matches || 0)
                           : (root.state.live_points !== undefined ? String(root.state.live_points) : "—")
@@ -774,6 +777,7 @@ Item {
                   anchors.bottom: parent.bottom
                 }
                 Text {
+                  textFormat: Text.PlainText
                   text: root.statto ? "live" : "GW" + (root.state.gw || "—")
                   color: root.dim
                   font.family: root.fontFamily
@@ -784,6 +788,7 @@ Item {
               }
 
               Text {
+                textFormat: Text.PlainText
                 anchors.right: parent.right
                 text: {
                   if (root.needsSetup) return ""
@@ -815,6 +820,7 @@ Item {
               spacing: Style.space(2)
 
               Text {
+                textFormat: Text.PlainText
                 anchors.right: parent.right
                 text: root.deadlineLeft >= 0 ? Fmt.countdown(root.deadlineLeft) : "—"
                 color: root.deadlineLeft >= 0 && root.deadlineLeft < 10800 ? root.badColor : root.foreground
@@ -823,6 +829,7 @@ Item {
                 font.bold: true
               }
               Text {
+                textFormat: Text.PlainText
                 anchors.right: parent.right
                 text: root.state.next_gw ? "to GW" + root.state.next_gw + " deadline" : "season over"
                 color: root.dim
@@ -860,6 +867,7 @@ Item {
               color: current ? root.selectedBackground : "transparent"
 
               Text {
+                textFormat: Text.PlainText
                 anchors.centerIn: parent
                 text: modelData.label
                 color: current ? root.selectedText : root.dim
@@ -903,6 +911,7 @@ Item {
             spacing: Style.space(2)
 
             Text {
+              textFormat: Text.PlainText
               id: filterEcho
               anchors.verticalCenter: parent.verticalCenter
               text: root.filterText !== "" ? root.filterText : root.tabs[root.tabIndex].filter
@@ -927,6 +936,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.right: parent.right
             anchors.rightMargin: Style.spacing.rowPaddingX
             anchors.verticalCenter: parent.verticalCenter
@@ -955,6 +965,7 @@ Item {
             visible: root.view === "greeter"
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: "FPL Gaffer"
               color: root.foreground
@@ -971,6 +982,7 @@ Item {
               visible: root.greetStep === 0
 
               Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: "How do you want to use it?"
                 color: root.dim
@@ -1009,6 +1021,7 @@ Item {
                     spacing: Style.space(3)
 
                     Text {
+                      textFormat: Text.PlainText
                       text: modelData.title
                       color: root.foreground
                       font.family: root.fontFamily
@@ -1016,6 +1029,7 @@ Item {
                       font.bold: true
                     }
                     Text {
+                      textFormat: Text.PlainText
                       width: parent.width
                       text: modelData.blurb
                       color: root.dim
@@ -1034,6 +1048,7 @@ Item {
               }
 
               Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: "↑↓ to choose  ·  Enter to continue  ·  Esc to close"
                 color: root.fainter
@@ -1050,6 +1065,7 @@ Item {
               visible: root.greetStep === 1
 
               Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: "Type your Fantasy Premier League team number. You'll find it in the "
                       + "address bar when you look at your own points on the FPL site — the "
@@ -1069,6 +1085,7 @@ Item {
                 border.color: root.accent
 
                 Text {
+                  textFormat: Text.PlainText
                   anchors.centerIn: parent
                   text: root.draftEntry !== "" ? root.draftEntry : "your team number"
                   color: root.draftEntry !== "" ? root.foreground : root.fainter
@@ -1078,6 +1095,7 @@ Item {
                 }
               }
               Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: "Enter to save  ·  Ctrl+V to paste  ·  Esc to go back"
                 color: root.fainter
@@ -1100,6 +1118,7 @@ Item {
 
           // Waiting for the first refresh.
           Text {
+            textFormat: Text.PlainText
             anchors.centerIn: parent
             visible: root.view === "list" && !root.loaded
             text: "Fetching from the Fantasy Premier League…"
@@ -1146,6 +1165,7 @@ Item {
           border.color: Qt.rgba(1, 1, 1, 0.18)
 
           Text {
+            textFormat: Text.PlainText
             id: footerText
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
@@ -1157,6 +1177,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             anchors.rightMargin: Style.spacing.rowPaddingX

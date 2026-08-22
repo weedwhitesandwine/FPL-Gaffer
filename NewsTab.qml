@@ -75,6 +75,7 @@ Item {
           color: active ? (app ? app.selectedBackground : "#222")
                         : Util.alpha(app ? app.foreground : "#fff", 0.04)
           Text {
+            textFormat: Text.PlainText
             id: modeLabel
             anchors.centerIn: parent
             text: modelData.label
@@ -93,6 +94,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       text: tab.mode === "news"
               ? "Sorted with your own players first, then by how widely owned they are."
@@ -148,6 +150,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.space(4)
             Text {
+              textFormat: Text.PlainText
               text: row.modelData.name
               color: app ? app.statusColor(row.modelData.status) : "#fff"
               font.family: app ? app.fontFamily : "monospace"
@@ -157,6 +160,7 @@ Item {
               width: Math.min(implicitWidth, Style.space(112))
             }
             Text {
+              textFormat: Text.PlainText
               anchors.verticalCenter: parent.verticalCenter
               text: row.modelData.team
               color: app ? app.fainter : "#888"
@@ -164,6 +168,7 @@ Item {
               font.pixelSize: Style.font.caption
             }
             Text {
+              textFormat: Text.PlainText
               visible: row.watched
               anchors.verticalCenter: parent.verticalCenter
               text: "★"
@@ -175,6 +180,7 @@ Item {
 
           // --- injuries and news
           Text {
+            textFormat: Text.PlainText
             visible: tab.mode === "news"
             width: Style.space(90)
             anchors.verticalCenter: parent.verticalCenter
@@ -190,6 +196,7 @@ Item {
             font.bold: true
           }
           Text {
+            textFormat: Text.PlainText
             visible: tab.mode === "news"
             width: Math.max(Style.space(80), parent.width - Style.space(300))
             anchors.verticalCenter: parent.verticalCenter
@@ -204,6 +211,7 @@ Item {
 
           // --- price watch: a bar showing how close the move is
           Text {
+            textFormat: Text.PlainText
             visible: tab.mode === "prices"
             width: Style.space(64)
             anchors.verticalCenter: parent.verticalCenter
@@ -213,6 +221,7 @@ Item {
             font.pixelSize: Style.font.bodySmall
           }
           Text {
+            textFormat: Text.PlainText
             visible: tab.mode === "prices"
             width: Style.space(58)
             anchors.verticalCenter: parent.verticalCenter
@@ -240,6 +249,7 @@ Item {
             }
           }
           Text {
+            textFormat: Text.PlainText
             visible: tab.mode === "prices"
             width: Style.space(50)
             anchors.verticalCenter: parent.verticalCenter
@@ -262,6 +272,7 @@ Item {
                           ? "xGI " + Number(row.modelData.xgi).toFixed(1) : "" }
             ] : []
             delegate: Text {
+              textFormat: Text.PlainText
               required property var modelData
               width: Style.space(modelData.w)
               anchors.verticalCenter: parent.verticalCenter
@@ -275,6 +286,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.centerIn: parent
         visible: tab.rows.length === 0
         text: tab.mode === "prices"

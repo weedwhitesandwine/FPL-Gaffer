@@ -15,6 +15,7 @@ Item {
     width: parent ? parent.width : 0
     spacing: Style.spacing.sm
     Text {
+      textFormat: Text.PlainText
       text: parent.title
       color: app ? app.fainter : "#888"
       font.family: app ? app.fontFamily : "monospace"
@@ -62,12 +63,14 @@ Item {
         width: parent.width - Style.space(34) - Style.spacing.md
         spacing: Style.space(1)
         Text {
+          textFormat: Text.PlainText
           text: label
           color: app ? app.foreground : "#fff"
           font.family: app ? app.fontFamily : "monospace"
           font.pixelSize: Style.font.body
         }
         Text {
+          textFormat: Text.PlainText
           visible: blurb !== ""
           width: parent.width
           text: blurb
@@ -130,6 +133,7 @@ Item {
               anchors.margins: Style.spacing.md
               spacing: Style.space(1)
               Text {
+                textFormat: Text.PlainText
                 text: modelData.title
                 color: app ? app.foreground : "#fff"
                 font.family: app ? app.fontFamily : "monospace"
@@ -137,6 +141,7 @@ Item {
                 font.bold: true
               }
               Text {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: modelData.blurb
                 color: app ? app.dim : "#aaa"
@@ -169,6 +174,7 @@ Item {
           border.color: app && app.editingEntry ? app.accent : app.hairline
 
           Text {
+            textFormat: Text.PlainText
             anchors.centerIn: parent
             text: app && app.draftEntry !== "" ? app.draftEntry : "your team ID"
             color: app && app.draftEntry !== "" ? app.foreground : app.fainter
@@ -185,6 +191,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: form.width
           text: "Type digits to edit · Ctrl+V to paste · Backspace to correct"
           color: app ? app.fainter : "#888"
@@ -200,6 +207,7 @@ Item {
           color: Util.alpha(app ? app.foreground : "#fff", 0.04)
 
           Text {
+            textFormat: Text.PlainText
             id: help
             anchors.left: parent.left
             anchors.right: parent.right
@@ -305,6 +313,7 @@ Item {
               color: chosen ? (app ? app.selectedBackground : "#222")
                             : Util.alpha(app ? app.foreground : "#fff", 0.04)
               Text {
+                textFormat: Text.PlainText
                 id: sectionLabel
                 anchors.centerIn: parent
                 text: modelData
@@ -330,6 +339,7 @@ Item {
           border.color: app ? app.accent : "#fff"
 
           Text {
+            textFormat: Text.PlainText
             anchors.left: parent.left
             anchors.leftMargin: Style.spacing.rowPaddingX
             anchors.verticalCenter: parent.verticalCenter
@@ -343,6 +353,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: app && app.draftShortcut !== "" && !app.capturing
             anchors.right: parent.right
             anchors.rightMargin: Style.spacing.rowPaddingX
@@ -379,6 +390,7 @@ Item {
           radius: app ? app.cornerRadius : 0
           color: Util.alpha(app ? app.accent : "#fff", 0.22)
           Text {
+            textFormat: Text.PlainText
             anchors.centerIn: parent
             text: "Save"
             color: app ? app.foreground : "#fff"
@@ -399,6 +411,7 @@ Item {
           radius: app ? app.cornerRadius : 0
           color: Util.alpha(app ? app.foreground : "#fff", 0.06)
           Text {
+            textFormat: Text.PlainText
             anchors.centerIn: parent
             text: "Cancel"
             color: app ? app.dim : "#aaa"
@@ -413,6 +426,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           text: "Enter saves  ·  Esc goes back"
           color: app ? app.fainter : "#888"

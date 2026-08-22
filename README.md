@@ -112,6 +112,14 @@ Nothing is ever uploaded, posted or reported. Your team number is used only to
 build the URL of your own public team page. There is no account, no key, no
 telemetry, and no third party.
 
+Neither feed is trusted to behave. A reply is refused above 8 MB on the wire
+and above 32 MB once unpacked, so neither an oversized response nor a small
+heavily compressed one can exhaust the memory of a process that runs all day;
+an over-sized reply is treated exactly like a failed request, falling back to
+the last good copy on disk. Every piece of text the overlay draws is pinned to
+plain text, so a name or a news line arriving from either API is displayed as
+the characters it contains and never interpreted as markup.
+
 **Timer: yes.** The engine polls on an interval, because live scores are the
 purpose. It adapts: roughly once a minute while matches are actually being
 played, every few minutes in the hours before a deadline, and every fifteen

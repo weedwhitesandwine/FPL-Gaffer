@@ -85,12 +85,14 @@ Item {
     property color tone: app ? app.foreground : "#fff"
     spacing: Style.space(1)
     Text {
+      textFormat: Text.PlainText
       text: parent.k
       color: app ? app.fainter : "#888"
       font.family: app ? app.fontFamily : "monospace"
       font.pixelSize: Style.font.caption
     }
     Text {
+      textFormat: Text.PlainText
       text: parent.v
       color: parent.tone
       font.family: app ? app.fontFamily : "monospace"
@@ -139,6 +141,7 @@ Item {
         spacing: Style.space(3)
 
         Text {
+          textFormat: Text.PlainText
           text: pc.p ? String(pc.p.applied) : "0"
           color: pc.p && pc.p.applied > 0 ? (app ? app.shirtText : "#fff")
                                           : (app ? app.shirtSubtle : "#c9e8d6")
@@ -147,6 +150,7 @@ Item {
           font.bold: true
         }
         Text {
+          textFormat: Text.PlainText
           visible: pc.p && pc.p.provisional > 0
           anchors.bottom: parent.bottom
           anchors.bottomMargin: Style.space(2)
@@ -159,6 +163,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         width: parent.width
         horizontalAlignment: Text.AlignHCenter
         text: pc.p ? pc.p.name : ""
@@ -173,6 +178,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         width: parent.width
         horizontalAlignment: Text.AlignHCenter
         text: {
@@ -208,6 +214,7 @@ Item {
           border.color: app ? app.fixedOutline : "#fff"
 
           Text {
+            textFormat: Text.PlainText
             id: flagText
             anchors.centerIn: parent
             text: tab.flag(pc.p)
@@ -219,6 +226,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           id: returnsText
           visible: tab.flag(pc.p) === ""
           anchors.centerIn: parent
@@ -255,6 +263,7 @@ Item {
       border.width: pc.p && pc.p.vice ? 1 : 0
       border.color: "#ffffff"
       Text {
+        textFormat: Text.PlainText
         anchors.centerIn: parent
         text: pc.p && pc.p.captain ? "C" : "V"
         color: pc.p && pc.p.captain ? (app ? app.turf : "#0a3a20") : "#ffffff"
@@ -266,6 +275,7 @@ Item {
 
     // Auto-sub arrow, top left
     Text {
+      textFormat: Text.PlainText
       visible: pc.p && (pc.p.subbed_in || pc.p.subbed_out)
       anchors.left: parent.left
       anchors.top: parent.top
@@ -362,6 +372,7 @@ Item {
             color: active ? (app ? app.selectedBackground : "#222")
                           : Util.alpha(app ? app.foreground : "#fff", 0.05)
             Text {
+              textFormat: Text.PlainText
               id: switchLabel
               anchors.centerIn: parent
               text: modelData.label
@@ -392,6 +403,7 @@ Item {
       border.color: Util.alpha(app ? app.cardRed : "#c62828", 0.55)
 
       Text {
+        textFormat: Text.PlainText
         id: doubtText
         anchors.fill: parent
         anchors.margins: Style.spacing.sm
@@ -423,6 +435,7 @@ Item {
       color: Util.alpha(app ? app.accent : "#fff", 0.12)
 
       Text {
+        textFormat: Text.PlainText
         id: subsText
         anchors.fill: parent
         anchors.margins: Style.spacing.sm
@@ -564,6 +577,7 @@ Item {
         color: app ? app.dugout : "#08301b"
 
         Text {
+          textFormat: Text.PlainText
           id: benchLabel2
           anchors.horizontalCenter: parent.horizontalCenter
           anchors.top: parent.top
@@ -611,24 +625,24 @@ Item {
             anchors.leftMargin: Style.spacing.rowPaddingX
             anchors.rightMargin: Style.spacing.rowPaddingX
             spacing: Style.spacing.md
-            Text { width: Style.space(34); text: "POS"; color: app ? app.fainter : "#888"
+            Text { textFormat: Text.PlainText; width: Style.space(34); text: "POS"; color: app ? app.fainter : "#888"
                    font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-            Text { width: Style.space(150); text: "PLAYER"; color: app ? app.fainter : "#888"
+            Text { textFormat: Text.PlainText; width: Style.space(150); text: "PLAYER"; color: app ? app.fainter : "#888"
                    font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-            Text { width: Style.space(120); text: "FIXTURE"; color: app ? app.fainter : "#888"
+            Text { textFormat: Text.PlainText; width: Style.space(120); text: "FIXTURE"; color: app ? app.fainter : "#888"
                    font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-            Text { width: Style.space(80); text: "KICK OFF"; color: app ? app.fainter : "#888"
+            Text { textFormat: Text.PlainText; width: Style.space(80); text: "KICK OFF"; color: app ? app.fainter : "#888"
                    font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-            Text { width: Style.space(44); horizontalAlignment: Text.AlignRight; text: "MIN"
+            Text { textFormat: Text.PlainText; width: Style.space(44); horizontalAlignment: Text.AlignRight; text: "MIN"
                    color: app ? app.fainter : "#888"
                    font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
             Item { width: Style.space(14); height: 1 }
-            Text { width: Style.space(130); text: "RETURNS"; color: app ? app.fainter : "#888"
+            Text { textFormat: Text.PlainText; width: Style.space(130); text: "RETURNS"; color: app ? app.fainter : "#888"
                    font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-            Text { width: Style.space(44); horizontalAlignment: Text.AlignRight; text: "BPS"
+            Text { textFormat: Text.PlainText; width: Style.space(44); horizontalAlignment: Text.AlignRight; text: "BPS"
                    color: app ? app.fainter : "#888"
                    font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-            Text { width: Style.space(44); horizontalAlignment: Text.AlignRight; text: "PTS"
+            Text { textFormat: Text.PlainText; width: Style.space(44); horizontalAlignment: Text.AlignRight; text: "PTS"
                    color: app ? app.fainter : "#888"
                    font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
           }
@@ -671,6 +685,7 @@ Item {
                 height: parent.height
                 color: app ? app.background : "#000"
                 Text {
+                  textFormat: Text.PlainText
                   id: benchLabel
                   anchors.verticalCenter: parent.verticalCenter
                   text: "BENCH"
@@ -697,6 +712,7 @@ Item {
                 spacing: Style.spacing.md
 
                 Text {
+                  textFormat: Text.PlainText
                   width: Style.space(34)
                   anchors.verticalCenter: parent.verticalCenter
                   text: listRow.modelData.pos
@@ -710,6 +726,7 @@ Item {
                   anchors.verticalCenter: parent.verticalCenter
                   spacing: Style.space(4)
                   Text {
+                    textFormat: Text.PlainText
                     text: listRow.modelData.name
                     color: app ? app.statusColor(listRow.modelData.status) : "#fff"
                     font.family: app ? app.fontFamily : "monospace"
@@ -727,6 +744,7 @@ Item {
                     border.width: listRow.modelData.vice ? 1 : 0
                     border.color: app ? app.dim : "#888"
                     Text {
+                      textFormat: Text.PlainText
                       anchors.centerIn: parent
                       text: listRow.modelData.captain ? "C" : "V"
                       color: listRow.modelData.captain ? (app ? app.background : "#000")
@@ -737,6 +755,7 @@ Item {
                     }
                   }
                   Text {
+                    textFormat: Text.PlainText
                     visible: listRow.modelData.subbed_in || listRow.modelData.subbed_out
                     anchors.verticalCenter: parent.verticalCenter
                     text: listRow.modelData.subbed_in ? "↑" : "↓"
@@ -747,6 +766,7 @@ Item {
                     font.bold: true
                   }
                   Text {
+                    textFormat: Text.PlainText
                     visible: app ? app.isWatched(listRow.modelData.id) : false
                     anchors.verticalCenter: parent.verticalCenter
                     text: "★"
@@ -766,6 +786,7 @@ Item {
                   border.width: 1
                   border.color: app ? app.fixedOutline : "#fff"
                   Text {
+                    textFormat: Text.PlainText
                     id: listFlag
                     anchors.centerIn: parent
                     text: tab.flag(listRow.modelData)
@@ -777,6 +798,7 @@ Item {
                 }
 
                 Text {
+                  textFormat: Text.PlainText
                   width: Style.space(120)
                   anchors.verticalCenter: parent.verticalCenter
                   text: listRow.modelData.fixture || "—"
@@ -788,6 +810,7 @@ Item {
 
                 // Kick-off, or the live clock once the match is under way
                 Text {
+                  textFormat: Text.PlainText
                   width: Style.space(80)
                   anchors.verticalCenter: parent.verticalCenter
                   text: listRow.modelData.when
@@ -800,6 +823,7 @@ Item {
                 }
 
                 Text {
+                  textFormat: Text.PlainText
                   width: Style.space(44)
                   anchors.verticalCenter: parent.verticalCenter
                   horizontalAlignment: Text.AlignRight
@@ -812,6 +836,7 @@ Item {
                 Item { width: Style.space(14); height: 1 }
 
                 Text {
+                  textFormat: Text.PlainText
                   width: Style.space(130)
                   anchors.verticalCenter: parent.verticalCenter
                   text: {
@@ -837,6 +862,7 @@ Item {
                 }
 
                 Text {
+                  textFormat: Text.PlainText
                   width: Style.space(44)
                   anchors.verticalCenter: parent.verticalCenter
                   horizontalAlignment: Text.AlignRight
@@ -847,6 +873,7 @@ Item {
                 }
 
                 Text {
+                  textFormat: Text.PlainText
                   width: Style.space(44)
                   anchors.verticalCenter: parent.verticalCenter
                   horizontalAlignment: Text.AlignRight
@@ -872,6 +899,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       width: parent.width
       visible: tab.squad.length === 0
       text: tab.st.needs_setup ? "Link your team to see your squad." : "Waiting for your squad…"

@@ -16,7 +16,6 @@ should never need a virtualenv.
 """
 
 import fcntl
-import gzip
 import json
 import os
 import subprocess
@@ -24,12 +23,14 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import zlib
 from datetime import datetime, timezone
 
 API = "https://fantasy.premierleague.com/api"
-# The Premier League's own feed, used for one thing the fantasy game does not
-# publish: who refereed a match. It answers a plain client as long as the
-# request looks like it came from premierleague.com.
+# The Premier League's own feed. It is the source of everything the fantasy
+# game either does not publish or publishes late: the match clock, the live
+# score, goals, bookings and the referee. It answers a plain client as long
+# as the request looks like it came from premierleague.com.
 PULSE = "https://footballapi.pulselive.com/football"
 UA = "Mozilla/5.0 (X11; Linux x86_64) Gaffer/1.0 (Omarchy plugin)"
 
@@ -173,6 +174,44 @@ MANUAL_KINDS = ("fixtures", "live", "status", "entry", "picks")
 MANUAL_TTL = 5
 
 
+# How much either feed is allowed to send us. Nothing they publish comes
+# close: the whole fantasy player database is under two megabytes. Reading
+# without a ceiling would let a single oversized reply — or a small, heavily
+# compressed one that unpacks into gigabytes — exhaust the memory of a
+# process that runs all day, and then write the result into the cache folder.
+# Past the cap we treat the reply as a failed fetch, which already falls back
+# to the last good copy on disk.
+MAX_WIRE = 8 * 1024 * 1024        # bytes accepted over the wire
+MAX_UNPACKED = 32 * 1024 * 1024   # bytes accepted after decompression
+
+
+class TooBig(Exception):
+    """The other end sent more than we are willing to hold in memory."""
+
+
+def read_capped(resp):
+    """Read a response body, refusing anything oversized, and unpack gzip a
+    slice at a time so a small reply cannot inflate without limit."""
+    raw = resp.read(MAX_WIRE + 1)
+    if len(raw) > MAX_WIRE:
+        raise TooBig("reply exceeded %d bytes" % MAX_WIRE)
+    if resp.headers.get("Content-Encoding") != "gzip":
+        return raw
+
+    unzip = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    out = bytearray()
+    pending = raw
+    while pending:
+        out += unzip.decompress(pending, MAX_UNPACKED + 1 - len(out))
+        if len(out) > MAX_UNPACKED:
+            raise TooBig("reply unpacked past %d bytes" % MAX_UNPACKED)
+        pending = unzip.unconsumed_tail
+    out += unzip.flush()
+    if len(out) > MAX_UNPACKED:
+        raise TooBig("reply unpacked past %d bytes" % MAX_UNPACKED)
+    return bytes(out)
+
+
 def fetch(path, kind, live, force=False):
     """GET an API path, going through a small on-disk cache."""
     slug = path.strip("/").replace("/", "_").replace("?", "_").replace("=", "-")
@@ -194,11 +233,9 @@ def fetch(path, kind, live, force=False):
     )
     try:
         with urllib.request.urlopen(req, timeout=25) as resp:
-            raw = resp.read()
-            if resp.headers.get("Content-Encoding") == "gzip":
-                raw = gzip.decompress(raw)
-            data = json.loads(raw.decode("utf-8"))
-    except (urllib.error.URLError, ValueError, OSError, TimeoutError) as exc:
+            data = json.loads(read_capped(resp).decode("utf-8"))
+    except (urllib.error.URLError, ValueError, OSError, TimeoutError,
+            zlib.error, TooBig) as exc:
         log("fetch failed %s: %s" % (path, exc))
         return read_json(cache_path)  # stale beats nothing
 
@@ -229,11 +266,9 @@ def pulse_fetch(path, ttl):
     )
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
-            raw = resp.read()
-            if resp.headers.get("Content-Encoding") == "gzip":
-                raw = gzip.decompress(raw)
-            data = json.loads(raw.decode("utf-8"))
-    except (urllib.error.URLError, ValueError, OSError, TimeoutError) as exc:
+            data = json.loads(read_capped(resp).decode("utf-8"))
+    except (urllib.error.URLError, ValueError, OSError, TimeoutError,
+            zlib.error, TooBig) as exc:
         log("pulse fetch failed %s: %s" % (path, exc))
         return read_json(cache_path)
 

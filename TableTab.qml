@@ -70,13 +70,14 @@ Item {
         anchors.rightMargin: Style.spacing.rowPaddingX
         spacing: tab.colGap
 
-        Text { width: tab.wPos; text: "#"; color: app ? app.fainter : "#888"
+        Text { textFormat: Text.PlainText; width: tab.wPos; text: "#"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-        Text { width: tab.wClub; text: "CLUB"; color: app ? app.fainter : "#888"
+        Text { textFormat: Text.PlainText; width: tab.wClub; text: "CLUB"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
         Repeater {
           model: tab.statLabels
           delegate: Text {
+            textFormat: Text.PlainText
             required property var modelData
             width: tab.wStat
             horizontalAlignment: Text.AlignRight
@@ -86,17 +87,17 @@ Item {
             font.pixelSize: Style.font.caption
           }
         }
-        Text { width: tab.wPts; horizontalAlignment: Text.AlignRight; text: "PTS"
+        Text { textFormat: Text.PlainText; width: tab.wPts; horizontalAlignment: Text.AlignRight; text: "PTS"
                color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
         Item { width: tab.formLead; height: 1 }
-        Text { width: tab.wForm; text: "FORM"; color: app ? app.fainter : "#888"
+        Text { textFormat: Text.PlainText; width: tab.wForm; text: "FORM"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
 
         // Set apart from the league's own figures, because this one is about
         // your team rather than the club's season.
         Item { width: tab.wGap; height: 1 }
-        Text { width: tab.wSquad; horizontalAlignment: Text.AlignHCenter
+        Text { textFormat: Text.PlainText; width: tab.wSquad; horizontalAlignment: Text.AlignHCenter
                visible: !(app && app.statto)
                text: "SQUAD PLAYERS"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
@@ -148,6 +149,7 @@ Item {
           spacing: tab.colGap
 
           Text {
+            textFormat: Text.PlainText
             width: tab.wPos
             anchors.verticalCenter: parent.verticalCenter
             text: String(modelData.position)
@@ -157,6 +159,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: tab.wClub
             anchors.verticalCenter: parent.verticalCenter
             text: modelData.name
@@ -171,6 +174,7 @@ Item {
             model: [modelData.played, modelData.won, modelData.drawn, modelData.lost,
                     modelData.gf, modelData.ga, Fmt.signed(modelData.gd)]
             delegate: Text {
+              textFormat: Text.PlainText
               required property var modelData
               width: tab.wStat
               anchors.verticalCenter: parent.verticalCenter
@@ -183,6 +187,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: tab.wPts
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
@@ -220,6 +225,7 @@ Item {
                 border.width: 1
                 border.color: app ? app.fixedOutline : "#fff"
                 Text {
+                  textFormat: Text.PlainText
                   anchors.centerIn: parent
                   text: modelData
                   color: "#ffffff"
@@ -235,6 +241,7 @@ Item {
           // How many of your players come from this club.
           Item { width: tab.wGap; height: 1 }
           Text {
+            textFormat: Text.PlainText
             width: tab.wSquad
             visible: !(app && app.statto)
             anchors.verticalCenter: parent.verticalCenter
@@ -249,6 +256,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.centerIn: parent
         visible: tab.rows.length === 0
         text: "No clubs match that."

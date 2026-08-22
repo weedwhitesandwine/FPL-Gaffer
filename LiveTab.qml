@@ -110,6 +110,7 @@ Item {
             height: Style.space(13)
 
             Text {
+              textFormat: Text.PlainText
               id: tagText
               visible: entry.swatch === ""
               anchors.verticalCenter: parent.verticalCenter
@@ -131,6 +132,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             text: {
               var bits = []
@@ -161,6 +163,7 @@ Item {
           readonly property int sideWidth: (width - Style.space(120) - Style.space(150)) / 2
 
           Text {                                            // home club
+            textFormat: Text.PlainText
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             width: parent.sideWidth
@@ -174,6 +177,7 @@ Item {
           }
 
           Text {                                            // score, or "v"
+            textFormat: Text.PlainText
             anchors.left: parent.left
             anchors.leftMargin: parent.sideWidth
             anchors.verticalCenter: parent.verticalCenter
@@ -188,6 +192,7 @@ Item {
           }
 
           Text {                                            // away club
+            textFormat: Text.PlainText
             anchors.left: parent.left
             anchors.leftMargin: parent.sideWidth + Style.space(120)
             anchors.verticalCenter: parent.verticalCenter
@@ -206,6 +211,7 @@ Item {
             spacing: Style.spacing.md
 
             Text {
+              textFormat: Text.PlainText
               anchors.verticalCenter: parent.verticalCenter
               text: card.modelData.mine.length > 0
                       ? card.modelData.mine.length + " of yours" : ""
@@ -222,6 +228,7 @@ Item {
               color: card.inPlay ? Util.alpha(app ? app.accent : "#fff", 0.22)
                                  : Util.alpha(app ? app.foreground : "#fff", 0.07)
               Text {
+                textFormat: Text.PlainText
                 id: clockText
                 anchors.centerIn: parent
                 // The league's own clock where we have it — it knows about
@@ -316,6 +323,7 @@ Item {
                                   modelData.counting ? 0.10 : 0.04)
 
                 Text {
+                  textFormat: Text.PlainText
                   id: pill
                   anchors.centerIn: parent
                   text: {
@@ -370,6 +378,7 @@ Item {
             spacing: Style.space(2)
 
             Text {
+              textFormat: Text.PlainText
               text: tab.statto ? "Referee" : "Bonus race"
               color: app ? app.fainter : "#888"
               font.family: app ? app.fontFamily : "monospace"
@@ -377,6 +386,7 @@ Item {
             }
 
             Text {
+              textFormat: Text.PlainText
               visible: tab.statto
               text: card.fx.referee || ""
               color: app ? app.foreground : "#fff"
@@ -391,6 +401,7 @@ Item {
                 spacing: Style.spacing.md
 
                 Text {
+                  textFormat: Text.PlainText
                   width: Style.space(30)
                   text: modelData.bonus > 0 ? "+" + modelData.bonus : ""
                   color: app ? app.accent : "#fff"
@@ -399,6 +410,7 @@ Item {
                   font.bold: true
                 }
                 Text {
+                  textFormat: Text.PlainText
                   width: Style.space(170)
                   text: modelData.name + "  " + modelData.team
                   color: app ? app.foreground : "#fff"
@@ -407,6 +419,7 @@ Item {
                   elide: Text.ElideRight
                 }
                 Text {
+                  textFormat: Text.PlainText
                   text: modelData.bps + " bps"
                   color: app ? app.dim : "#aaa"
                   font.family: app ? app.fontFamily : "monospace"
@@ -420,6 +433,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.centerIn: parent
       visible: tab.rows.length === 0
       text: "No matches this gameweek match that."

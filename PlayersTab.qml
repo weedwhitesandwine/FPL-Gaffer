@@ -170,6 +170,7 @@ Item {
           color: active ? (app ? app.selectedBackground : "#222")
                         : Util.alpha(app ? app.foreground : "#fff", 0.05)
           Text {
+            textFormat: Text.PlainText
             id: chipText
             anchors.centerIn: parent
             text: modelData === "all" ? "All" : modelData
@@ -194,6 +195,7 @@ Item {
         Row {
           spacing: Style.space(3)
           Text {
+            textFormat: Text.PlainText
             text: "P"
             color: app ? app.accent : "#fff"
             font.family: app ? app.fontFamily : "monospace"
@@ -201,6 +203,7 @@ Item {
             font.bold: true
           }
           Text {
+            textFormat: Text.PlainText
             text: "takes penalties"
             color: app ? app.fainter : "#888"
             font.family: app ? app.fontFamily : "monospace"
@@ -211,12 +214,14 @@ Item {
         Row {
           spacing: Style.space(3)
           Text {
+            textFormat: Text.PlainText
             text: "★"
             color: app ? app.accent : "#fff"
             font.family: app ? app.fontFamily : "monospace"
             font.pixelSize: Style.font.caption
           }
           Text {
+            textFormat: Text.PlainText
             text: "on your watchlist — Enter to add"
             color: app ? app.fainter : "#888"
             font.family: app ? app.fontFamily : "monospace"
@@ -254,6 +259,7 @@ Item {
               spacing: Style.space(2)
 
               Text {
+                textFormat: Text.PlainText
                 text: head.modelData.label
                 color: head.active ? (app ? app.accent : "#fff") : (app ? app.fainter : "#888")
                 font.family: app ? app.fontFamily : "monospace"
@@ -261,6 +267,7 @@ Item {
                 font.bold: head.active
               }
               Text {
+                textFormat: Text.PlainText
                 visible: head.active
                 text: tab.sortDesc ? "▼" : "▲"
                 color: app ? app.accent : "#fff"
@@ -345,6 +352,7 @@ Item {
                 spacing: Style.space(4)
 
                 Text {
+                  textFormat: Text.PlainText
                   text: cell.p.name
                   color: app ? app.statusColor(cell.p.status) : "#fff"
                   font.family: app ? app.fontFamily : "monospace"
@@ -354,6 +362,7 @@ Item {
                   width: Math.min(implicitWidth, Style.space(100))
                 }
                 Text {
+                  textFormat: Text.PlainText
                   anchors.verticalCenter: parent.verticalCenter
                   text: cell.p.team
                   color: app ? app.fainter : "#888"
@@ -361,6 +370,7 @@ Item {
                   font.pixelSize: Style.font.caption
                 }
                 Text {
+                  textFormat: Text.PlainText
                   visible: app ? app.isWatched(cell.p.id) : false
                   anchors.verticalCenter: parent.verticalCenter
                   text: "★"
@@ -369,6 +379,7 @@ Item {
                   font.pixelSize: Style.font.caption
                 }
                 Text {
+                  textFormat: Text.PlainText
                   visible: cell.p.pens === 1
                   anchors.verticalCenter: parent.verticalCenter
                   text: "P"
@@ -387,6 +398,7 @@ Item {
                 spacing: Style.space(2)
 
                 Text {
+                  textFormat: Text.PlainText
                   text: tab.cellText(cell.col, cell.p)
                   color: app ? app.foreground : "#fff"
                   font.family: app ? app.fontFamily : "monospace"
@@ -394,6 +406,7 @@ Item {
                   font.bold: cell.sorted
                 }
                 Text {
+                  textFormat: Text.PlainText
                   visible: Math.abs(cell.p.price_pct || 0) >= 50
                   text: (cell.p.price_pct || 0) > 0 ? "▲" : "▼"
                   color: app ? app.deltaColor(cell.p.price_pct || 0) : "#aaa"
@@ -404,6 +417,7 @@ Item {
 
               // Everything else is one value in one place.
               Text {
+                textFormat: Text.PlainText
                 visible: cell.col.kind !== "name" && cell.col.kind !== "price"
                 anchors.fill: parent
                 verticalAlignment: Text.AlignVCenter
@@ -422,6 +436,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.centerIn: parent
         visible: tab.rows.length === 0
         text: "No players match that."

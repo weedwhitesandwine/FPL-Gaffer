@@ -115,6 +115,7 @@ Item {
           spacing: Style.space(2)
 
           Text {
+            textFormat: Text.PlainText
             text: parent.parent.label
             color: parent.parent.active ? (app ? app.accent : "#fff")
                                         : (app ? app.fainter : "#888")
@@ -123,6 +124,7 @@ Item {
             font.bold: parent.parent.active
           }
           Text {
+            textFormat: Text.PlainText
             visible: parent.parent.active
             text: tab.sortAsc ? "▲" : "▼"
             color: app ? app.accent : "#fff"
@@ -202,6 +204,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.spacing.sm
             Text {
+              textFormat: Text.PlainText
               text: modelData.name
               color: app ? app.foreground : "#fff"
               font.family: app ? app.fontFamily : "monospace"
@@ -211,6 +214,7 @@ Item {
               width: Math.min(implicitWidth, Style.space(112))
             }
             Text {
+              textFormat: Text.PlainText
               visible: mine
               anchors.verticalCenter: parent.verticalCenter
               text: "★"
@@ -222,6 +226,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: Style.space(46)
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
@@ -244,6 +249,7 @@ Item {
 
               // Blank gameweek — this club simply isn't playing.
               Text {
+                textFormat: Text.PlainText
                 anchors.centerIn: parent
                 visible: cell.games.length === 0
                 text: "—"
@@ -270,6 +276,7 @@ Item {
                     border.color: app ? app.fixedOutline : "#fff"
 
                     Text {
+                      textFormat: Text.PlainText
                       anchors.centerIn: parent
                       // Capitals for home, lower case for away — the way
                       // fixture tickers have always done it.
@@ -296,6 +303,7 @@ Item {
       spacing: Style.spacing.lg
 
       Text {
+        textFormat: Text.PlainText
         anchors.verticalCenter: parent.verticalCenter
         text: "Difficulty"
         color: app ? app.fainter : "#888"
@@ -315,6 +323,7 @@ Item {
             border.width: 1
             border.color: app ? app.fixedOutline : "#fff"
             Text {
+              textFormat: Text.PlainText
               anchors.centerIn: parent
               text: String(modelData)
               color: app ? app.fdrText(modelData) : "#fff"
@@ -325,6 +334,7 @@ Item {
         }
       }
       Text {
+        textFormat: Text.PlainText
         anchors.verticalCenter: parent.verticalCenter
         text: "CAPS = home  ·  two rows = double  ·  — = blank  ·  ★ = you own someone"
         color: app ? app.fainter : "#888"

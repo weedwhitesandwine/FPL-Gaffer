@@ -70,6 +70,7 @@ Item {
                          : Util.alpha(app ? app.foreground : "#fff", 0.04)
 
           Text {
+            textFormat: Text.PlainText
             id: label
             anchors.centerIn: parent
             text: modelData.name + "  " + Fmt.rank(modelData.size)
@@ -94,6 +95,7 @@ Item {
       spacing: Style.spacing.lg
 
       Text {
+        textFormat: Text.PlainText
         text: {
           if (!tab.league) return ""
           if (tab.league.computed) return "Scored live from every member's team."
@@ -110,6 +112,7 @@ Item {
       // In a league of millions you will not be in the first fifty, so your
       // own standing is stated rather than left for you to hunt for.
       Text {
+        textFormat: Text.PlainText
         visible: tab.league && !tab.league.in_view && tab.league.your_rank
         text: {
           if (!tab.league || !tab.league.your_rank) return ""
@@ -136,19 +139,19 @@ Item {
         anchors.leftMargin: Style.spacing.rowPaddingX
         anchors.rightMargin: Style.spacing.rowPaddingX
         spacing: tab.colGap
-        Text { width: tab.wRank; text: "RANK"; color: app ? app.fainter : "#888"
+        Text { textFormat: Text.PlainText; width: tab.wRank; text: "RANK"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-        Text { width: tab.wTeam; text: "TEAM"; color: app ? app.fainter : "#888"
+        Text { textFormat: Text.PlainText; width: tab.wTeam; text: "TEAM"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-        Text { width: tab.wManager; text: "MANAGER"; color: app ? app.fainter : "#888"
+        Text { textFormat: Text.PlainText; width: tab.wManager; text: "MANAGER"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-        Text { width: tab.wChip; horizontalAlignment: Text.AlignRight; text: "CHIP"
+        Text { textFormat: Text.PlainText; width: tab.wChip; horizontalAlignment: Text.AlignRight; text: "CHIP"
                color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-        Text { width: tab.wGw; horizontalAlignment: Text.AlignRight; text: "GW"
+        Text { textFormat: Text.PlainText; width: tab.wGw; horizontalAlignment: Text.AlignRight; text: "GW"
                color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
-        Text { width: tab.wTotal; horizontalAlignment: Text.AlignRight; text: "TOTAL"
+        Text { textFormat: Text.PlainText; width: tab.wTotal; horizontalAlignment: Text.AlignRight; text: "TOTAL"
                color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
       }
@@ -200,12 +203,14 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.space(3)
             Text {
+              textFormat: Text.PlainText
               text: String(shown)
               color: app ? app.foreground : "#fff"
               font.family: app ? app.fontFamily : "monospace"
               font.pixelSize: Style.font.body
             }
             Text {
+              textFormat: Text.PlainText
               visible: moved !== 0 && modelData.last_rank > 0
               text: moved > 0 ? "▲" : "▼"
               color: app ? app.deltaColor(moved) : "#aaa"
@@ -216,6 +221,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: tab.wTeam
             anchors.verticalCenter: parent.verticalCenter
             text: modelData.name || "—"
@@ -227,6 +233,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: tab.wManager
             anchors.verticalCenter: parent.verticalCenter
             text: modelData.player || "—"
@@ -237,6 +244,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: tab.wChip
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
@@ -247,6 +255,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: tab.wGw
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
@@ -259,6 +268,7 @@ Item {
           }
 
           Text {
+            textFormat: Text.PlainText
             width: tab.wTotal
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
@@ -273,6 +283,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.centerIn: parent
         visible: tab.rows.length === 0
         text: tab.tables.length === 0
