@@ -45,6 +45,11 @@ Ui.BarWidget {
   readonly property bool opened: GafferState.overlay ? GafferState.overlay.opened === true : false
   function open() { if (GafferState.overlay) GafferState.overlay.openAt(root.anchorCenterX()) }
   function close() { if (GafferState.overlay) GafferState.overlay.dismiss() }
+  function toggle() {
+    if (!GafferState.overlay) return
+    if (GafferState.overlay.opened) root.close()
+    else root.open()
+  }
 
   readonly property string stateDir: {
     var base = Quickshell.env("XDG_STATE_HOME")

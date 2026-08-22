@@ -9,7 +9,9 @@ fixture difficulty grid, player stats and a podium board — and, if you play
 the game, your squad scored live with provisional bonus, projected auto-subs
 and your mini-leagues. All of it wearing your current Omarchy theme.
 
-![FPL Gaffer](preview.png)
+![FPL Gaffer mode — your squad on the pitch](preview.png)
+
+![Premier League Fan mode — the live match ticker](fan-mode.png)
 
 Two ways to use it, chosen on first run and changeable in settings:
 
@@ -54,6 +56,47 @@ plugin directory produced seven plugin reloads.
 The files are staged and moved into place in one step, so installing costs
 one shell reload rather than one per file. Then run `omarchy restart shell`
 and enable it in the plugin manager.
+
+## Removing it
+
+```bash
+./install.sh --uninstall
+```
+
+It asks before removing the plugin, and asks separately before touching your
+settings and cache — the default is to leave them. To take it out of the bar
+and drop its hotkey without uninstalling:
+
+```bash
+./gaffer-ctl.sh bar off
+./gaffer-ctl.sh unbind
+```
+
+Or remove it through the Omarchy plugin manager, which handles the plugin
+folder; your settings under `~/.local/state/gaffer` stay until you delete
+them.
+
+## What it needs, and what it touches
+
+**Dependencies.** `python3` only, and only its standard library — no
+virtualenv, no pip, no build step. `notify-send` for desktop notifications,
+which Omarchy already provides. Nothing else.
+
+**Privileges.** None. It never asks for a password, never uses `sudo` or
+`pkexec`, and runs entirely as you. It does not start a second Quickshell
+process; the one background process it does start is the Python engine,
+supervised with `setpriv --pdeathsig TERM` so it cannot outlive the shell,
+and stoppable with `./gaffer-ctl.sh stop`.
+
+**Files.** It writes to exactly two places: its own plugin folder at install
+time, and `~/.local/state/gaffer` for settings, cache and logs. It deletes
+nothing on its own — clearing the cache is a command you run.
+
+**Network.** Two hosts, both read-only and unauthenticated:
+`fantasy.premierleague.com` for everything, and `footballapi.pulselive.com`
+for one field the fantasy API does not publish, the name of a match referee.
+No account, no key, no login, and nothing is ever sent anywhere — your team
+number is used only to build a URL for your own public team page.
 
 ## How it works
 

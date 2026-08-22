@@ -30,7 +30,7 @@ FILES=(manifest.json qmldir Gaffer.qml GafferState.qml BarWidget.qml Fmt.js
 # Shipped if present, skipped without complaint if not. preview.png is the
 # catalogue thumbnail; it is a convention rather than anything the shell
 # reads, so its absence must never fail an install.
-OPTIONAL_FILES=(preview.png)
+OPTIONAL_FILES=(preview.png fan-mode.png)
 
 usage() {
   cat <<USAGE
