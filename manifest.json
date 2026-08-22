@@ -5,7 +5,7 @@
   "version": "0.2.0",
   "author": "weedwhitesandwine",
   "license": "MIT",
-  "description": "The ultimate dashboard for Premier League fans - FPL mode for players and Fan mode for everyone else",
+  "description": "The ultimate dashboard for Premier League fans \u2014 FPL mode for players and Fan mode for everyone else",
   "kinds": [
     "overlay",
     "bar-widget"

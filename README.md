@@ -1,6 +1,6 @@
 # FPL Gaffer
 
-**The ultimate dashboard for Premier League fans - FPL mode for players and
+**The ultimate dashboard for Premier League fans — FPL mode for players and
 Fan mode for everyone else.**
 
 A Premier League and Fantasy Premier League dashboard for the
