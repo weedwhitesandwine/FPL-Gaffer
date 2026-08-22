@@ -32,16 +32,9 @@ Ui.BarWidget {
 
   readonly property bool statto: root.barData && root.barData.mode === "statto"
 
-  // The bar earns its width with one number and nothing else: your points
-  // in Gaffer mode, the count of matches in play in statto mode. Deadlines,
-  // kick-off times and the rest live in the tooltip, where they cost nothing.
-  readonly property string readout: {
-    if (!root.barData) return ""
-    if (root.statto)
-      return root.barData.live_matches > 0 ? String(root.barData.live_matches) : ""
-    if (root.barData.points === undefined || root.barData.points === null) return ""
-    return String(root.barData.points)
-  }
+  // Just the ball. A bar icon should say "this is here", not report a score
+  // you did not ask to see every time you glance at the clock. Points, rank,
+  // deadline and what is in play all live in the tooltip.
 
   function anchorCenterX() {
     var g = button.mapToItem(null, button.width / 2, 0)
@@ -53,8 +46,13 @@ Ui.BarWidget {
   function open() { if (GafferState.overlay) GafferState.overlay.openAt(root.anchorCenterX()) }
   function close() { if (GafferState.overlay) GafferState.overlay.dismiss() }
 
+  readonly property string stateDir: {
+    var base = Quickshell.env("XDG_STATE_HOME")
+    return (base ? base : root.home + "/.local/state") + "/gaffer"
+  }
+
   FileView {
-    path: root.home + "/.local/state/gaffer/bar.json"
+    path: root.stateDir + "/bar.json"
     printErrors: false
     watchChanges: true
     onLoaded: {
@@ -77,7 +75,7 @@ Ui.BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.readout === "" ? "\uF1E3" : "\uF1E3 " + root.readout
+    text: "\uF1E3"
     tooltipText: {
       if (!root.barData || root.barData.gw === undefined) return "FPL Gaffer"
       if (root.statto) {

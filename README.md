@@ -19,9 +19,26 @@ Two ways to use it, chosen on first run and changeable in settings:
 ./install.sh
 ```
 
-That stages the files and moves them into `~/.config/omarchy/plugins/` in one
-step, so the shell reloads once rather than once per file. Then enable it in
-the Omarchy plugin manager.
+It lists exactly what it will write and where, and writes nothing until you
+say yes. `--dry-run` shows the list and stops; `--yes` skips the prompt;
+`--uninstall` removes the code and asks separately before touching your data.
+
+It writes to exactly two places:
+
+| What | Where | Why there |
+| --- | --- | --- |
+| Plugin code | `~/.config/omarchy/plugins/io.github.weedwhitesandwine.gaffer` | the only place the shell loads plugins from (`--plugin-dir` to override) |
+| Settings, cache, logs | `~/.local/state/gaffer` (or `$XDG_STATE_HOME`) | **must** stay out of the plugin folder — see below |
+
+The state file cannot live in the plugin folder. Omarchy watches that folder
+recursively with `inotifywait -m -r` and reloads the plugin on every write
+inside it, so a file that changes each minute during a match would reload
+your shell each minute too. Measured: five writes into a subfolder of a
+plugin directory produced seven plugin reloads.
+
+The files are staged and moved into place in one step, so installing costs
+one shell reload rather than one per file. Then run `omarchy restart shell`
+and enable it in the plugin manager.
 
 ## How it works
 
@@ -74,9 +91,10 @@ somebody else, you have copied the wrong number.
 | Path | What |
 | --- | --- |
 | `~/.local/state/gaffer/state.json` | everything the overlay draws |
-| `~/.local/state/gaffer/bar.json` | the small slice the bar readout reads |
+| `~/.local/state/gaffer/bar.json` | the small slice the bar icon reads |
 | `~/.local/state/gaffer/settings.json` | your choices |
 | `~/.local/state/gaffer/cache/` | raw API responses |
+| `~/.local/state/gaffer/backups/` | previous versions, kept on upgrade |
 | `~/.local/state/gaffer/gafferd.log` | engine log |
 
 `gaffer-ctl.sh stop` stops the background engine.

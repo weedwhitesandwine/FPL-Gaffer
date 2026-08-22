@@ -29,7 +29,17 @@ from datetime import datetime, timezone
 API = "https://fantasy.premierleague.com/api"
 UA = "Mozilla/5.0 (X11; Linux x86_64) Gaffer/1.0 (Omarchy plugin)"
 
-STATE_DIR = os.path.expanduser("~/.local/state/gaffer")
+# Settings, cache and logs. This is deliberately NOT inside the plugin
+# folder: Omarchy watches that folder recursively with inotify and reloads
+# the plugin on every write, so a state file living there would reload the
+# shell once a minute all through a match. The XDG state directory is the
+# right home for it, and the installer says so out loud.
+def _state_dir():
+    base = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
+    return os.path.join(base, "gaffer")
+
+
+STATE_DIR = _state_dir()
 CACHE_DIR = os.path.join(STATE_DIR, "cache")
 STATE_FILE = os.path.join(STATE_DIR, "state.json")
 BAR_FILE = os.path.join(STATE_DIR, "bar.json")
@@ -1002,6 +1012,7 @@ def cycle(previous):
 
 
 def main():
+    # First run creates the data directory the installer told the user about.
     os.makedirs(CACHE_DIR, exist_ok=True)
     mode = sys.argv[1] if len(sys.argv) > 1 else "once"
 

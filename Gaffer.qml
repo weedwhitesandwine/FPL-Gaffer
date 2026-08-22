@@ -67,7 +67,15 @@ Item {
                                      && (!gsettings.entryId || state.needs_setup === true)
   readonly property bool dropdown: gsettings.mode === "dropdown"
 
-  readonly property string stateDir: root.home + "/.local/state/gaffer"
+  // Settings, cache and logs. Deliberately NOT inside the plugin folder:
+  // Omarchy watches that recursively and reloads the plugin on every write,
+  // so state living there would reload the shell once a minute during a
+  // match. The installer states this location explicitly.
+  readonly property string stateDir: {
+    var base = Quickshell.env("XDG_STATE_HOME")
+    return (base ? base : root.home + "/.local/state") + "/gaffer"
+  }
+
   readonly property string pluginDir: {
     var u = String(Qt.resolvedUrl("."))
     return decodeURIComponent(u.replace(/^file:\/\//, "")).replace(/\/$/, "")
@@ -127,6 +135,21 @@ Item {
 
   readonly property color cardYellow: "#e3b505"
   readonly property color cardRed:    "#c62828"
+
+  // The pitch is drawn in fixed colours, not theme colours. A pitch that
+  // changes colour with the wallpaper stops reading as a pitch, and the
+  // player cards need to be legible whatever the theme behind them is
+  // doing. These are picked for contrast and then left alone:
+  //   white on the card is 5.3:1, the card against the turf is 2.4:1.
+  readonly property color turf:        "#0a3a20"
+  readonly property color turfBand:    "#0d4527"
+  readonly property color turfLine:    Qt.rgba(1, 1, 1, 0.20)
+  readonly property color dugout:      "#08301b"
+  readonly property color shirt:       "#1c7a48"
+  readonly property color shirtLit:    "#2a9b5e"
+  readonly property color shirtEdge:   Qt.rgba(1, 1, 1, 0.22)
+  readonly property color shirtText:   "#ffffff"
+  readonly property color shirtSubtle: "#c9e8d6"
 
   // Difficulty 1 (kind) through 5 (brutal), with text picked for contrast
   // against the fill rather than against the theme.
@@ -266,11 +289,14 @@ Item {
     }
   }
 
-  // The engine. Runs as a child of the shell so its life matches the shell's;
-  // it takes a lock file, so a second copy simply steps aside.
+  // The engine. Runs as a child of the shell so its life matches the shell's,
+  // with pdeathsig so it can never be orphaned if the shell dies abruptly —
+  // the same supervision Omarchy's own clipboard plugin gives its watchers.
+  // It also takes a lock file, so a second copy simply steps aside.
   Process {
     id: daemon
-    command: ["python3", root.pluginDir + "/gafferd.py", "daemon"]
+    command: ["setpriv", "--pdeathsig", "TERM",
+              "python3", root.pluginDir + "/gafferd.py", "daemon"]
     running: true
     onExited: daemonRestart.restart()
   }

@@ -129,15 +129,14 @@ Item {
     width: compact ? Style.space(104) : Style.space(124)
     height: cardCol.implicitHeight + Style.spacing.sm * 2
     radius: app ? Math.max(app.cornerRadius, Style.space(3)) : 0
-    color: selected ? (app ? app.selectedBackground : "#222")
-                    : Util.alpha(app ? app.foreground : "#fff", counting ? 0.10 : 0.05)
-    opacity: !matched ? 0.2 : (counting ? 1.0 : 0.66)
+    color: selected ? (app ? app.shirtLit : "#2a9b5e") : (app ? app.shirt : "#1c7a48")
+    opacity: !matched ? 0.28 : (counting ? 1.0 : 0.72)
 
-    // A live match gets a lit edge; the captain gets a solid one.
-    border.width: (matched && filtering) || (p && p.live) || (p && p.captain) ? 1 : 0
-    border.color: p && p.captain ? (app ? app.accent : "#fff")
-                : (matched && filtering) ? (app ? app.accent : "#fff")
-                : Util.alpha(app ? app.accent : "#fff", 0.55)
+    // A live match, the captain, or a filter hit all get a white edge —
+    // white always reads on this green, whatever the theme is doing.
+    border.width: (matched && filtering) || (p && p.live) || (p && p.captain) || selected ? 1 : 0
+    border.color: (p && p.captain) || selected || (matched && filtering)
+                    ? "#ffffff" : (app ? app.shirtEdge : "#fff")
 
     Behavior on opacity { NumberAnimation { duration: 160 } }
 
@@ -154,8 +153,8 @@ Item {
 
         Text {
           text: pc.p ? String(pc.p.applied) : "0"
-          color: pc.p && pc.p.applied > 0 ? (app ? app.foreground : "#fff")
-                                          : (app ? app.dim : "#aaa")
+          color: pc.p && pc.p.applied > 0 ? (app ? app.shirtText : "#fff")
+                                          : (app ? app.shirtSubtle : "#c9e8d6")
           font.family: app ? app.fontFamily : "monospace"
           font.pixelSize: Style.font.heading
           font.bold: true
@@ -165,7 +164,7 @@ Item {
           anchors.bottom: parent.bottom
           anchors.bottomMargin: Style.space(2)
           text: pc.p ? "~" + pc.p.provisional : ""
-          color: app ? app.accent : "#fff"
+          color: app ? app.shirtText : "#fff"
           font.family: app ? app.fontFamily : "monospace"
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -176,7 +175,11 @@ Item {
         width: parent.width
         horizontalAlignment: Text.AlignHCenter
         text: pc.p ? pc.p.name : ""
-        color: app && pc.p ? app.statusColor(pc.p.status) : "#fff"
+        // A doubt still shows in its own fixed colour; everyone else is white.
+        color: pc.p && pc.p.status && pc.p.status !== "a"
+                 ? (pc.p.status === "d" ? (app ? app.cardYellow : "#e3b505")
+                                        : (app ? app.cardRed : "#c62828"))
+                 : (app ? app.shirtText : "#fff")
         font.family: app ? app.fontFamily : "monospace"
         font.pixelSize: Style.font.bodySmall
         font.bold: pc.p && pc.p.captain
@@ -192,9 +195,10 @@ Item {
           if (pc.p.played) return pc.p.team + " · " + pc.p.minutes + "'"
           return pc.p.team + " · " + pc.p.when
         }
-        color: pc.p && pc.p.live ? (app ? app.accent : "#fff") : (app ? app.fainter : "#888")
+        color: app ? app.shirtSubtle : "#c9e8d6"
         font.family: app ? app.fontFamily : "monospace"
         font.pixelSize: Style.font.caption
+        font.bold: pc.p && pc.p.live
         elide: Text.ElideRight
       }
 
@@ -237,7 +241,8 @@ Item {
           if (pc.p.red) bits.push("RC")
           return bits.join(" ")
         }
-        color: pc.p && pc.p.red ? (app ? app.badColor : "#a33") : (app ? app.dim : "#aaa")
+        color: pc.p && pc.p.red ? (app ? app.cardRed : "#c62828")
+                                : (app ? app.shirtSubtle : "#c9e8d6")
         font.family: app ? app.fontFamily : "monospace"
         font.pixelSize: Style.font.caption
       }
@@ -251,13 +256,13 @@ Item {
       anchors.margins: Style.space(3)
       width: Style.space(14); height: Style.space(14)
       radius: width / 2
-      color: pc.p && pc.p.captain ? (app ? app.accent : "#fff") : "transparent"
+      color: pc.p && pc.p.captain ? "#ffffff" : "transparent"
       border.width: pc.p && pc.p.vice ? 1 : 0
-      border.color: app ? app.dim : "#888"
+      border.color: "#ffffff"
       Text {
         anchors.centerIn: parent
         text: pc.p && pc.p.captain ? "C" : "V"
-        color: pc.p && pc.p.captain ? (app ? app.background : "#000") : (app ? app.dim : "#888")
+        color: pc.p && pc.p.captain ? (app ? app.turf : "#0a3a20") : "#ffffff"
         font.family: app ? app.fontFamily : "monospace"
         font.pixelSize: Style.font.caption
         font.bold: true
@@ -271,7 +276,7 @@ Item {
       anchors.top: parent.top
       anchors.margins: Style.space(3)
       text: pc.p && pc.p.subbed_in ? "↑" : "↓"
-      color: pc.p && pc.p.subbed_in ? (app ? app.goodColor : "#3a3") : (app ? app.badColor : "#a33")
+      color: "#ffffff"
       font.family: app ? app.fontFamily : "monospace"
       font.pixelSize: Style.font.bodySmall
       font.bold: true
@@ -285,7 +290,7 @@ Item {
       anchors.margins: Style.space(4)
       width: Style.space(5); height: Style.space(5)
       radius: width / 2
-      color: app ? app.accent : "#fff"
+      color: "#ffffff"
       SequentialAnimation on opacity {
         running: pc.p && pc.p.live
         loops: Animation.Infinite
@@ -455,10 +460,10 @@ Item {
         anchors.top: parent.top
         height: parent.height - pitchArea.benchHeight - Style.spacing.sm
         radius: app ? app.cornerRadius : 0
-        // A pitch has to read as a pitch, but it must not shout over the
-        // theme — so the markings are the theme's own foreground at a
-        // whisper, over the theme's own background.
-        color: Util.alpha(app ? app.foreground : "#fff", 0.03)
+        // Fixed green, on purpose. A pitch drawn in theme colours stops
+        // reading as a pitch, and the cards need a known background to be
+        // legible against.
+        color: app ? app.turf : "#0a3a20"
         clip: true
 
         // Mown bands, running across the pitch the way you'd see them from
@@ -472,8 +477,7 @@ Item {
               required property int index
               width: pitch.width
               height: pitch.height / 8
-              color: index % 2 === 0 ? Util.alpha(app ? app.foreground : "#fff", 0.014)
-                                     : "transparent"
+              color: index % 2 === 0 ? (app ? app.turfBand : "#0d4527") : "transparent"
             }
           }
         }
@@ -484,7 +488,7 @@ Item {
           anchors.top: parent.top
           anchors.bottom: parent.bottom
           width: 1
-          color: Util.alpha(app ? app.foreground : "#fff", 0.07)
+          color: app ? app.turfLine : "#fff"
           visible: false
         }
         Rectangle {                                    // halfway line
@@ -492,7 +496,7 @@ Item {
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
           height: 1
-          color: Util.alpha(app ? app.foreground : "#fff", 0.08)
+          color: app ? app.turfLine : "#fff"
         }
         Rectangle {                                    // centre circle
           anchors.centerIn: parent
@@ -501,7 +505,7 @@ Item {
           radius: width / 2
           color: "transparent"
           border.width: 1
-          border.color: Util.alpha(app ? app.foreground : "#fff", 0.08)
+          border.color: app ? app.turfLine : "#fff"
         }
         Rectangle {                                    // penalty box, top
           anchors.horizontalCenter: parent.horizontalCenter
@@ -510,7 +514,7 @@ Item {
           height: pitch.height * 0.14
           color: "transparent"
           border.width: 1
-          border.color: Util.alpha(app ? app.foreground : "#fff", 0.07)
+          border.color: app ? app.turfLine : "#fff"
         }
         Rectangle {                                    // penalty box, bottom
           anchors.horizontalCenter: parent.horizontalCenter
@@ -519,7 +523,7 @@ Item {
           height: pitch.height * 0.14
           color: "transparent"
           border.width: 1
-          border.color: Util.alpha(app ? app.foreground : "#fff", 0.07)
+          border.color: app ? app.turfLine : "#fff"
         }
 
         // The four lines
@@ -558,16 +562,17 @@ Item {
         anchors.bottom: parent.bottom
         height: pitchArea.benchHeight
         radius: app ? app.cornerRadius : 0
-        color: Util.alpha(app ? app.foreground : "#fff", 0.04)
+        color: app ? app.dugout : "#08301b"
 
         Text {
           anchors.left: parent.left
           anchors.top: parent.top
           anchors.margins: Style.spacing.sm
           text: "BENCH" + (tab.st.chip === "bboost" ? "  ·  boosted, all counting" : "")
-          color: tab.st.chip === "bboost" ? (app ? app.accent : "#fff") : (app ? app.fainter : "#888")
+          color: app ? app.shirtSubtle : "#c9e8d6"
           font.family: app ? app.fontFamily : "monospace"
           font.pixelSize: Style.font.caption
+          font.bold: tab.st.chip === "bboost"
         }
 
         Row {
