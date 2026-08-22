@@ -51,7 +51,15 @@ Item {
     return place === 0 ? "#d4af37" : (place === 1 ? "#aeb7c0" : "#c17f3a")
   }
 
+  // The board is taller than the view, and it has no list for the arrow
+  // keys to walk, so it offers the shell a way to scroll it directly.
+  function scrollBy(step) {
+    var limit = Math.max(0, board.contentHeight - board.height)
+    board.contentY = Math.max(0, Math.min(limit, board.contentY + step))
+  }
+
   Flickable {
+    id: board
     anchors.fill: parent
     contentHeight: grid.implicitHeight
     clip: true
@@ -98,15 +106,39 @@ Item {
               width: parent.width
               height: titleCol.implicitHeight
 
-              Text {
+              // Most categories carry a glyph; the two about bookings carry
+              // an actual card, in the same fixed colours the match ticker
+              // uses, so a yellow card looks like a yellow card.
+              Item {
                 id: glyph
                 anchors.left: parent.left
                 anchors.top: parent.top
                 width: Style.space(26)
-                text: panel.modelData.glyph
-                color: app ? app.accent : "#fff"
-                font.family: app ? app.fontFamily : "monospace"
-                font.pixelSize: Style.font.heading
+                height: Style.font.heading
+
+                Text {
+                  visible: String(panel.modelData.swatch || "") === ""
+                  anchors.left: parent.left
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: String(panel.modelData.glyph || "")
+                  color: app ? app.accent : "#fff"
+                  font.family: app ? app.fontFamily : "monospace"
+                  font.pixelSize: Style.font.heading
+                }
+
+                Rectangle {
+                  visible: String(panel.modelData.swatch || "") !== ""
+                  anchors.left: parent.left
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Style.space(11)
+                  height: Style.space(15)
+                  radius: Style.space(2)
+                  color: panel.modelData.swatch === "red"
+                           ? (app ? app.cardRed : "#ff2b2b")
+                           : (app ? app.cardYellow : "#ffd400")
+                  border.width: 1
+                  border.color: app ? app.fixedOutline : "#fff"
+                }
               }
 
               Column {

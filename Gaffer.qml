@@ -52,6 +52,9 @@ Item {
   }
   readonly property string tab: tabs[Math.min(tabIndex, tabs.length - 1)].id
   readonly property bool filterable: tabs[Math.min(tabIndex, tabs.length - 1)].filterable === true
+  // Some tabs are a board to scroll rather than a list to walk.
+  readonly property bool tabScrolls: tabLoader.item
+                                     && typeof tabLoader.item.scrollBy === "function"
 
   // ------------------------------------------------------------------ state
   property var state: ({})
@@ -589,13 +592,21 @@ Item {
           } else if (event.key === Qt.Key_Right) {
             root.switchTab(1); event.accepted = true
           } else if (event.key === Qt.Key_Up) {
-            root.selectedIndex = Math.max(0, root.selectedIndex - 1); event.accepted = true
+            if (root.tabScrolls) tabLoader.item.scrollBy(-Style.space(60))
+            else root.selectedIndex = Math.max(0, root.selectedIndex - 1)
+            event.accepted = true
           } else if (event.key === Qt.Key_Down) {
-            root.selectedIndex = root.selectedIndex + 1; event.accepted = true
+            if (root.tabScrolls) tabLoader.item.scrollBy(Style.space(60))
+            else root.selectedIndex = root.selectedIndex + 1
+            event.accepted = true
           } else if (event.key === Qt.Key_PageUp) {
-            root.selectedIndex = Math.max(0, root.selectedIndex - 10); event.accepted = true
+            if (root.tabScrolls) tabLoader.item.scrollBy(-Style.space(360))
+            else root.selectedIndex = Math.max(0, root.selectedIndex - 10)
+            event.accepted = true
           } else if (event.key === Qt.Key_PageDown) {
-            root.selectedIndex = root.selectedIndex + 10; event.accepted = true
+            if (root.tabScrolls) tabLoader.item.scrollBy(Style.space(360))
+            else root.selectedIndex = root.selectedIndex + 10
+            event.accepted = true
           } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             if (tabLoader.item && typeof tabLoader.item.activate === "function")
               tabLoader.item.activate(root.selectedIndex)

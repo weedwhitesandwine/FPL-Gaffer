@@ -487,10 +487,13 @@ def build_monsters(players):
 
     cats = []
 
-    def add(cid, title, glyph, blurb, stat, pool, key, suffix=""):
+    def add(cid, title, glyph, blurb, stat, pool, key, suffix="", swatch=""):
         winners = top(pool, key)
         cats.append({
             "id": cid, "title": title, "glyph": glyph, "blurb": blurb, "stat": stat,
+            # A swatch draws a real card in the fixed booking colours instead
+            # of a text glyph — a yellow card should look like a yellow card.
+            "swatch": swatch,
             "players": [card(p, key(p), suffix) for p in winners],
         })
 
@@ -511,17 +514,17 @@ def build_monsters(players):
     add("assists", "Assist Kings", "♚", "The creators and providers",
         "ASSISTS", eligible, num("assists"))
 
-    add("value", "Value Monsters", "◈", "Best return per million spent",
+    add("value", "Value Monsters", "$", "Best return per million spent",
         "PTS/£m", [p for p in eligible if p["cost"] > 0],
         lambda p: round(p["total_points"] / p["cost"], 2))
     add("cleansheet", "Clean Sheet Machines", "▤", "The brick walls",
         "CLEAN SHEETS", back_line, num("clean_sheets"))
     add("shotstopper", "Shot Stoppers", "✤", "Keepers earning their money",
         "SAVES", keepers, num("saves"))
-    add("dirty", "Dirty Dogs", "▬", "The foul-happy merchants",
-        "YELLOWS", eligible, num("yellow"))
-    add("seeya", "See Ya", "▮", "Early bath specialists",
-        "REDS", eligible, num("red"))
+    add("dirty", "Dirty Dogs", "", "The foul-happy merchants",
+        "YELLOWS", eligible, num("yellow"), swatch="yellow")
+    add("seeya", "See Ya", "", "Early bath specialists",
+        "REDS", eligible, num("red"), swatch="red")
 
     return {"categories": cats}
 
