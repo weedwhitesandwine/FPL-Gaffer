@@ -431,6 +431,14 @@ def project_autosubs(picks, live, fixtures_by_team):
 
 # ---------------------------------------------------------------- assembling
 
+def as_float(value):
+    """FPL sends some numbers as strings; take them at face value once."""
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def index_players(boot):
     teams = {t["id"]: t for t in boot["teams"]}
     types = {t["id"]: t["singular_name_short"] for t in boot["element_types"]}
@@ -478,7 +486,7 @@ def index_players(boot):
             "bonus": e["bonus"],
             "transfers_in": e.get("transfers_in_event", 0),
             "transfers_out": e.get("transfers_out_event", 0),
-            "price_pct": e.get("price_change_percent") or 0,
+            "price_pct": as_float(e.get("price_change_percent")),
             "rise_pct": rise,
             "fall_pct": fall,
             "pens": e.get("penalties_text") or "",
@@ -893,7 +901,7 @@ def raise_notices(state, previous, settings):
                 notify("🅰 %s assists" % row["name"],
                        "%s — %s. Now on %d points." % (row["fixture"], row["when"], row["applied"]))
             if row["red"] > old["red"]:
-                notify("🟥 %s sent off" % row["name"], row["fixture"], urgency="critical")
+                notify("🟥 %s sent off" % row["name"], row["fixture"])
 
     # Live scores from every match, for people following the football rather
     # than a fantasy team. Compares this pass's scoreline against the last.
@@ -916,17 +924,26 @@ def raise_notices(state, previous, settings):
                 notify("Full time — %s" % fx["label"], "")
 
     if wants.get("kickoff"):
+        before_kick = {f["id"]: f for f in (previous or {}).get("fixtures", [])}
         for fx in state.get("fixtures", []):
+            if not fx.get("started"):
+                continue
             key = "ko-%d" % fx["id"]
-            if fx.get("started") and not seen.get(key):
-                seen[key] = True
+            if seen.get(key):
+                continue
+            seen[key] = True
+            # A match that kicked off while we were watching is news. One
+            # already under way when we started up is not, so it is marked
+            # as told without being announced.
+            was = before_kick.get(fx["id"])
+            if was is not None and not was.get("started"):
                 notify("Kick off — %s" % fx["label"], "")
 
     if wants.get("news"):
         for pid, row in squad.items():
             old = before.get(pid)
             if old and row["news"] and row["news"] != old["news"]:
-                notify("📋 %s — team news" % row["name"], row["news"], urgency="critical")
+                notify("📋 %s — team news" % row["name"], row["news"])
 
     if wants.get("bonus"):
         key = "bonus-%s" % state.get("gw")
@@ -947,10 +964,14 @@ def raise_notices(state, previous, settings):
 
     if wants.get("deadline") and state.get("deadline_in"):
         hours = state["deadline_in"] / 3600.0
-        for mark in (24, 3, 1):
+        reached = [m for m in (24, 3, 1) if hours <= m]
+        if reached:
+            mark = min(reached)
             key = "dl-%s-%d" % (state.get("next_gw"), mark)
-            if hours <= mark and not seen.get(key):
-                seen[key] = True
+            if not seen.get(key):
+                # Anything looser has been overtaken; never say it after the fact.
+                for m in reached:
+                    seen["dl-%s-%d" % (state.get("next_gw"), m)] = True
                 trouble = [r["name"] for r in state.get("squad", [])
                            if r["status"] in ("i", "s", "u", "n") and not r["benched"]]
                 body = "GW%s deadline." % state.get("next_gw")
@@ -1103,7 +1124,7 @@ def refresh(settings, previous):
         meta = players.get(pid)
         if not meta:
             continue
-        pct = float(meta["price_pct"] or 0)
+        pct = meta["price_pct"]
         direction = "up" if pct >= 0 else "down"
         magnitude = abs(pct)
         if magnitude < 20:
