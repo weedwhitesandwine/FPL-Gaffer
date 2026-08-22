@@ -464,11 +464,12 @@ def match_detail(fx, players):
 # with one substitution — fouls committed are not in the public API, so the
 # foul-happy category runs on bookings instead, which amounts to the same
 # accusation.
-MONSTER_MINUTES = 90
-
-
+# No minutes qualifier. Every category counts something a player either did
+# or did not do, and a goal is a goal whether it came in the ninetieth minute
+# or the sixth. The old ninety-minute gate hid two of Arsenal's three
+# scorers on the opening weekend, which is exactly the wrong answer.
 def build_monsters(players):
-    eligible = [p for p in players.values() if (p.get("minutes") or 0) >= MONSTER_MINUTES]
+    eligible = list(players.values())
 
     def card(p, value, suffix=""):
         return {
@@ -493,45 +494,22 @@ def build_monsters(players):
             "players": [card(p, key(p), suffix) for p in winners],
         })
 
-    attackers = [p for p in eligible if p["pos"] in ("MID", "FWD")]
-    def_mids   = [p for p in eligible if p["pos"] in ("DEF", "MID")]
     defenders  = [p for p in eligible if p["pos"] == "DEF"]
     back_line  = [p for p in eligible if p["pos"] in ("DEF", "GKP")]
     keepers    = [p for p in eligible if p["pos"] == "GKP"]
 
-    add("goal", "Goal Monsters", "⚽", "Top scorers this season",
-        "GOALS", attackers, num("goals"))
+    # Goals count from anyone. A scoring goalkeeper belongs on this list more
+    # than anybody.
+    add("goal", "Goal Monsters", "⚽", "Top scorers this season, any position",
+        "GOALS", eligible, num("goals"))
+    # Defensive contribution is scored by defenders, midfielders and forwards
+    # alike under the current rules, so the category is open to all of them.
     add("defcon", "DefCon Monsters", "⛨", "Defensive contribution machines",
-        "DEFCON", def_mids, num("defcon"))
+        "DEFCON", eligible, num("defcon"))
     add("closet", "Closet Strikers", "⚑", "Defenders who think they are forwards",
         "GOALS", defenders, num("goals"))
     add("assists", "Assist Kings", "♚", "The creators and providers",
         "ASSISTS", eligible, num("assists"))
-
-    # Set-piece duty is a standing, not a tally: first-choice penalties count
-    # for most, corners and free kicks for less.
-    def sp_score(p):
-        score = 0
-        if (p.get("pens_order") or 99) <= 1:
-            score += 3
-        if (p.get("corners_order") or 99) <= 2:
-            score += 2
-        if (p.get("fk_order") or 99) <= 2:
-            score += 2
-        return score
-
-    sp_pool = sorted([p for p in eligible if sp_score(p) > 0],
-                     key=lambda p: (-sp_score(p), -p["total_points"]))[:3]
-    cats.append({
-        "id": "setpiece", "title": "Set Piece Merchants", "glyph": "⌖",
-        "blurb": "First choice on penalties, corners and free kicks",
-        "stat": "DUTIES",
-        "players": [dict(card(p, sp_score(p)), duties=" ".join(
-            ([" PEN"] if (p.get("pens_order") or 99) <= 1 else [])
-            + (["CRN"] if (p.get("corners_order") or 99) <= 2 else [])
-            + (["FK"] if (p.get("fk_order") or 99) <= 2 else [])).strip())
-                    for p in sp_pool],
-    })
 
     add("value", "Value Monsters", "◈", "Best return per million spent",
         "PTS/£m", [p for p in eligible if p["cost"] > 0],
@@ -545,7 +523,7 @@ def build_monsters(players):
     add("seeya", "See Ya", "▮", "Early bath specialists",
         "REDS", eligible, num("red"))
 
-    return {"minutes": MONSTER_MINUTES, "categories": cats}
+    return {"categories": cats}
 
 
 def build_league_table(all_fixtures, teams):
