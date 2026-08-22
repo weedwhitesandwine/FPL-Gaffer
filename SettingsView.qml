@@ -103,10 +103,10 @@ Item {
 
         Repeater {
           model: [
-            { id: "gaffer", title: "FPL Gaffer",
+            { id: "gaffer", title: "FPL Gaffer mode",
               blurb: "You play Fantasy Premier League — your squad scored live, mini-leagues, "
                      + "price moves and deadline warnings." },
-            { id: "statto", title: "Premier League statto",
+            { id: "statto", title: "Premier League Fan mode",
               blurb: "You just follow the football — scores, table, fixtures and player stats. "
                      + "No fantasy team needed." }
           ]

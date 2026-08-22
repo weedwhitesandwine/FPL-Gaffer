@@ -916,10 +916,10 @@ Item {
 
               Repeater {
                 model: [
-                  { id: "gaffer", title: "FPL Gaffer",
+                  { id: "gaffer", title: "FPL Gaffer mode",
                     blurb: "You play Fantasy Premier League. Adds your squad scored live, "
                            + "provisional bonus, your mini-leagues, price moves and deadline warnings." },
-                  { id: "statto", title: "Premier League statto",
+                  { id: "statto", title: "Premier League Fan mode",
                     blurb: "You just follow the football. Scores, the league table, fixtures "
                            + "and player stats — no fantasy team needed." }
                 ]
