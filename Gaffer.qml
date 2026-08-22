@@ -32,22 +32,28 @@ Item {
   property int selectedIndex: 0
   property int tick: 0
 
-  // Tabs marked `fpl` only exist when you're actually playing the game.
+  // `modes` says where a tab belongs: "both", "fpl" for the fantasy game
+  // only, or "statto" for somebody who just follows the football. The board
+  // of podiums appears in both, but with different categories and a
+  // different name — league leaders on one side, monsters on the other.
   readonly property var allTabs: [
-    { id: "squad",    label: "Squad",    filter: "",                         fpl: true,  filterable: false },
-    { id: "live",     label: "Live",     filter: "Filter matches…",          fpl: false, filterable: true },
-    { id: "table",    label: "Table",    filter: "Filter clubs…",            fpl: false, filterable: true },
-    { id: "leagues",  label: "Leagues",  filter: "Filter managers…",         fpl: true,  filterable: true },
-    { id: "fixtures", label: "Fixtures", filter: "Filter clubs…",            fpl: false, filterable: true },
-    { id: "players",  label: "Players",  filter: "Search players…",          fpl: false, filterable: true },
+    { id: "squad",    label: "Squad",    filter: "",                         modes: "fpl",    filterable: false },
+    { id: "live",     label: "Live",     filter: "Filter matches…",          modes: "both",   filterable: true },
+    { id: "table",    label: "Table",    filter: "Filter clubs…",            modes: "both",   filterable: true },
+    { id: "leagues",  label: "Leagues",  filter: "Filter managers…",         modes: "fpl",    filterable: true },
+    { id: "fixtures", label: "Fixtures", filter: "Filter clubs…",            modes: "both",   filterable: true },
+    { id: "players",  label: "Players",  filter: "Search players…",          modes: "fpl",    filterable: true },
+    { id: "monsters", label: root.statto ? "Leaders" : "Monsters",
+                                         filter: "",                         modes: "both",   filterable: false },
     { id: "news",     label: "News",     filter: root.statto ? "Filter team news…"
-                                                             : "Filter news and prices…", fpl: false, filterable: true },
-    { id: "monsters", label: "Monsters", filter: "",                         fpl: true,  filterable: false }
+                                                             : "Filter news and prices…", modes: "both", filterable: true }
   ]
   readonly property var tabs: {
     var out = []
-    for (var i = 0; i < allTabs.length; i++)
-      if (!root.statto || !allTabs[i].fpl) out.push(allTabs[i])
+    for (var i = 0; i < allTabs.length; i++) {
+      var m = allTabs[i].modes
+      if (m === "both" || (root.statto ? m === "statto" : m === "fpl")) out.push(allTabs[i])
+    }
     return out
   }
   readonly property string tab: tabs[Math.min(tabIndex, tabs.length - 1)].id

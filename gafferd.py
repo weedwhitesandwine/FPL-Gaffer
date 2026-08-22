@@ -489,6 +489,9 @@ def index_players(boot):
             "yellow": e.get("yellow_cards", 0),
             "red": e.get("red_cards", 0),
             "saves": e.get("saves", 0),
+            "tackles": e.get("tackles", 0),
+            "cbit": e.get("clearances_blocks_interceptions", 0),
+            "recoveries": e.get("recoveries", 0),
             "ep_next": e.get("ep_next"),
         }
     return players, teams
@@ -574,7 +577,7 @@ def match_detail(fx, players):
 # or did not do, and a goal is a goal whether it came in the ninetieth minute
 # or the sixth. The old ninety-minute gate hid two of Arsenal's three
 # scorers on the opening weekend, which is exactly the wrong answer.
-def build_monsters(players, referees=None):
+def build_monsters(players, referees=None, mode="gaffer"):
     eligible = list(players.values())
 
     def card(p, value, suffix=""):
@@ -613,16 +616,25 @@ def build_monsters(players, referees=None):
         "GOALS", eligible, num("goals"))
     # Defensive contribution is scored by defenders, midfielders and forwards
     # alike under the current rules, so the category is open to all of them.
-    add("defcon", "DefCon Monsters", "⛨", "Defensive contribution machines",
-        "DEFCON", eligible, num("defcon"))
+    if mode == "gaffer":
+        add("defcon", "DefCon Monsters", "⛨", "Defensive contribution machines",
+            "DEFCON", eligible, num("defcon"))
+    else:
+        add("tackles", "Ball Winners", "⛨", "Most tackles made",
+            "TACKLES", eligible, num("tackles"))
+        add("cbit", "Human Walls", "▧", "Clearances, blocks and interceptions",
+            "CBI", eligible, num("cbit"))
+        add("recoveries", "Scavengers", "◇", "Loose balls hoovered up",
+            "RECOVERIES", eligible, num("recoveries"))
     add("closet", "Closet Strikers", "⚑", "Defenders who think they are forwards",
         "GOALS", defenders, num("goals"))
     add("assists", "Assist Kings", "♚", "The creators and providers",
         "ASSISTS", eligible, num("assists"))
 
-    add("value", "Value Monsters", "$", "Best return per million spent",
-        "PTS/£m", [p for p in eligible if p["cost"] > 0],
-        lambda p: round(p["total_points"] / p["cost"], 2))
+    if mode == "gaffer":
+        add("value", "Value Monsters", "$", "Best return per million spent",
+            "PTS/£m", [p for p in eligible if p["cost"] > 0],
+            lambda p: round(p["total_points"] / p["cost"], 2))
     add("cleansheet", "Clean Sheet Machines", "▤", "The brick walls",
         "CLEAN SHEETS", back_line, num("clean_sheets"))
     add("shotstopper", "Shot Stoppers", "✤", "Keepers earning their money",
@@ -1080,8 +1092,7 @@ def refresh(settings, previous):
 
     state["bonus_races"] = bonus_races(gw_fixtures, players)
     state["league_table"] = build_league_table(all_fixtures, teams)
-    if mode == "gaffer":
-        state["monsters"] = build_monsters(players, referee_records(all_fixtures))
+    state["monsters"] = build_monsters(players, referee_records(all_fixtures), mode)
     state["grid"] = build_fixture_grid(
         all_fixtures, teams, grid_start, int(settings.get("fixtureWeeks") or 6))
 
