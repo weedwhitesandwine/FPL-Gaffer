@@ -439,7 +439,8 @@ Item {
     }
     if (root.draftAppMode === "statto") root.draftBarSection = root.draftBarSection || "right"
 
-    var next = JSON.parse(JSON.stringify(root.gsettings))
+    var prev = root.gsettings
+    var next = JSON.parse(JSON.stringify(prev))
     next.greeted = true
     next.appMode = root.draftAppMode
     next.entryId = id
@@ -447,15 +448,26 @@ Item {
     next.barSection = root.draftBarSection
     next.shortcut = root.draftShortcut
     next.notify = root.draftNotify
+
+    // Files outside our own state directory are only touched when you have
+    // actually changed the setting that governs them. Finishing the first-run
+    // greeter, which never asks about the bar or a hotkey, must not quietly
+    // rewrite your bar layout or your Hyprland bindings.
+    var barChanged = next.barIcon !== prev.barIcon || next.barSection !== prev.barSection
+    var keyChanged = next.shortcut !== prev.shortcut
+
     root.gsettings = next
     root.saveSettings()
 
-    Quickshell.execDetached(["bash", root.pluginDir + "/gaffer-ctl.sh", "bar",
-                             next.barIcon ? "on" : "off", next.barSection])
-    if (next.shortcut)
-      Quickshell.execDetached(["bash", root.pluginDir + "/gaffer-ctl.sh", "bind", next.shortcut])
-    else
-      Quickshell.execDetached(["bash", root.pluginDir + "/gaffer-ctl.sh", "unbind"])
+    if (barChanged)
+      Quickshell.execDetached(["bash", root.pluginDir + "/gaffer-ctl.sh", "bar",
+                               next.barIcon ? "on" : "off", next.barSection])
+    if (keyChanged) {
+      if (next.shortcut)
+        Quickshell.execDetached(["bash", root.pluginDir + "/gaffer-ctl.sh", "bind", next.shortcut])
+      else
+        Quickshell.execDetached(["bash", root.pluginDir + "/gaffer-ctl.sh", "unbind"])
+    }
 
     root.view = "list"
     root.greetStep = 0

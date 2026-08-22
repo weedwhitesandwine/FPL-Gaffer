@@ -76,27 +76,61 @@ Or remove it through the Omarchy plugin manager, which handles the plugin
 folder; your settings under `~/.local/state/gaffer` stay until you delete
 them.
 
-## What it needs, and what it touches
+## What it writes, and when
 
-**Dependencies.** `python3` only, and only its standard library — no
-virtualenv, no pip, no build step. `notify-send` for desktop notifications,
-which Omarchy already provides. Nothing else.
+Everything this plugin runs and touches, in full — because a plugin shares the
+shell's process and runs unsandboxed with your permissions, and you should not
+have to read the source to find that out.
 
-**Privileges.** None. It never asks for a password, never uses `sudo` or
-`pkexec`, and runs entirely as you. It does not start a second Quickshell
-process; the one background process it does start is the Python engine,
-supervised with `setpriv --pdeathsig TERM` so it cannot outlive the shell,
-and stoppable with `./gaffer-ctl.sh stop`.
+**Processes it runs**
 
-**Files.** It writes to exactly two places: its own plugin folder at install
-time, and `~/.local/state/gaffer` for settings, cache and logs. It deletes
-nothing on its own — clearing the cache is a command you run.
+| Command | When |
+| --- | --- |
+| `setpriv --pdeathsig TERM python3 gafferd.py daemon` | started by the shell when the plugin loads; the pdeathsig means it cannot outlive the shell |
+| `python3 gafferd.py once` | one refresh, when you open the overlay or press Ctrl+R |
+| `notify-send` | only to raise a notification you have switched on |
+| `bash gaffer-ctl.sh bar …` | only when you change the bar setting in settings |
+| `bash gaffer-ctl.sh bind`/`unbind` | only when you change the hotkey in settings |
+| `hyprctl reload` | only from those two, after editing the hotkey block |
+| `pkill -f "gafferd.py daemon"` | only from `gaffer-ctl.sh stop`, which you run |
 
-**Network.** Two hosts, both read-only and unauthenticated:
-`fantasy.premierleague.com` for everything, and `footballapi.pulselive.com`
-for one field the fantasy API does not publish, the name of a match referee.
-No account, no key, no login, and nothing is ever sent anywhere — your team
-number is used only to build a URL for your own public team page.
+Nothing else. No package manager, no installer, no downloader, no shell
+pipeline built from remote data.
+
+**Files it writes**
+
+| Path | When |
+| --- | --- |
+| its own plugin folder | at install time only |
+| `~/.local/state/gaffer/` — settings, state, cache, log, backups | continuously, while running |
+| `~/.config/hypr/bindings.lua` | **only if you set a hotkey**, and only inside its own marked block, leaving every other line untouched |
+| `~/.config/omarchy/shell.json` | **only if you turn the bar readout on or off**, and only its own entry |
+
+Those last two are the only files outside its own directory it will ever
+touch, and neither is written unless you change that specific setting —
+finishing the first-run greeter does not rewrite either of them. It deletes
+nothing on its own; clearing the cache is a command you run.
+
+**Privileges: none.** It never asks for a password, never uses `sudo` or
+`pkexec`, and does nothing as root. It does not start a second Quickshell
+process.
+
+**Network: yes, and this is the point of it.** Two hosts, plain HTTPS GET,
+unauthenticated and read-only:
+
+- `fantasy.premierleague.com` — the game's own public API, for everything.
+- `footballapi.pulselive.com` — the Premier League's own feed, for one field
+  the fantasy API does not publish: the name of a match referee.
+
+Nothing is ever uploaded, posted or reported. Your team number is used only to
+build the URL of your own public team page. There is no account, no key, no
+telemetry, and no third party.
+
+**Timer: yes.** The engine polls on an interval, because live scores are the
+purpose. It adapts: roughly once a minute while matches are actually being
+played, every few minutes in the hours before a deadline, and every fifteen
+minutes otherwise. Responses are cached on disk and a stale copy is used if
+the API is unreachable, so it is not hammering anything.
 
 ## How it works
 
