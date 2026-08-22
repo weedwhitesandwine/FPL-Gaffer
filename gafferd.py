@@ -375,6 +375,27 @@ def bonus_races(fixtures, players):
     return races
 
 
+def team_fixtures(by_team, team_id):
+    return by_team.get(team_id) or []
+
+
+def shown_fixture(fixtures):
+    """The fixture worth putting on a player's card.
+
+    A match in play beats one still to come, which beats one already over —
+    because the first is what you are watching and the last is settled.
+    """
+    if not fixtures:
+        return None
+    live = [f for f in fixtures if f.get("started") and not f.get("finished_provisional")]
+    if live:
+        return live[0]
+    upcoming = [f for f in fixtures if not f.get("started")]
+    if upcoming:
+        return sorted(upcoming, key=lambda f: f.get("kickoff_time") or "")[0]
+    return sorted(fixtures, key=lambda f: f.get("kickoff_time") or "")[-1]
+
+
 VALID_MIN = {1: 1, 2: 3, 3: 2, 4: 1}
 VALID_MAX = {1: 1, 2: 5, 3: 5, 4: 3}
 
@@ -389,8 +410,9 @@ def project_autosubs(picks, live, fixtures_by_team):
     bench = [p for p in picks if p["position"] > 11]
 
     def finished(pick):
-        fx = fixtures_by_team.get(pick["_team"])
-        return bool(fx and fx.get("finished_provisional"))
+        # Only a blank once every one of his club's matches this week is over.
+        games = team_fixtures(fixtures_by_team, pick["_team"])
+        return bool(games) and all(f.get("finished_provisional") for f in games)
 
     def minutes(pick):
         return live.get(pick["element"], {}).get("minutes", 0)
@@ -821,7 +843,8 @@ def squad_view(picks_payload, live_stats, prov, players, fixtures_by_team, teams
     for p in picks:
         meta = players.get(p["element"], {})
         stats = live_stats.get(p["element"], {})
-        fx = fixtures_by_team.get(meta.get("team"))
+        games = team_fixtures(fixtures_by_team, meta.get("team"))
+        fx = shown_fixture(games)
         prov_pts = prov.get(p["element"], 0)
         base = stats.get("total_points", 0)
         mult = p["multiplier"] if p["multiplier"] else 1
@@ -872,6 +895,7 @@ def squad_view(picks_payload, live_stats, prov, players, fixtures_by_team, teams
             "chance": meta.get("chance"),
             "cost": meta.get("cost", 0),
             "fixture": fx.get("_label") if fx else "",
+            "double": len(games) > 1,
             "when": when,
             "live": live_now,
             "played": stats.get("minutes", 0) > 0,
@@ -1007,10 +1031,13 @@ def refresh(settings, previous):
     live_raw = fetch("/event/%d/live/" % gw, "live", live_now) or {}
     live_stats = {e["id"]: e["stats"] for e in live_raw.get("elements", [])}
 
+    # A club can play twice in a gameweek. Keeping only one of its fixtures
+    # meant a player who blanked in the early game could be written off as a
+    # definite blank while his second match was still to come.
     by_team = {}
     for f in gw_fixtures:
-        by_team[f["team_h"]] = f
-        by_team[f["team_a"]] = f
+        by_team.setdefault(f["team_h"], []).append(f)
+        by_team.setdefault(f["team_a"], []).append(f)
     live_stats["_by_team"] = by_team
     live_stats["_gw"] = gw
 
@@ -1113,7 +1140,15 @@ def refresh(settings, previous):
 
     state["bonus_races"] = bonus_races(gw_fixtures, players)
     state["league_table"] = build_league_table(all_fixtures, teams)
-    state["monsters"] = build_monsters(players, referee_records(all_fixtures), mode)
+    # The referee names are the one thing that comes from outside the FPL
+    # API. If that feed changes shape or disappears, that category should go
+    # quiet — it must not be able to take the whole refresh down with it.
+    try:
+        refs = referee_records(all_fixtures)
+    except Exception as exc:
+        log("referee lookup failed, carrying on without it: %s" % exc)
+        refs = []
+    state["monsters"] = build_monsters(players, refs, mode)
     state["grid"] = build_fixture_grid(
         all_fixtures, teams, grid_start, int(settings.get("fixtureWeeks") or 6))
 

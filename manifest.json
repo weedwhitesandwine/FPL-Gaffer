@@ -2,11 +2,14 @@
   "schemaVersion": 1,
   "id": "io.github.weedwhitesandwine.gaffer",
   "name": "FPL Gaffer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "weedwhitesandwine",
   "license": "MIT",
-  "description": "Fantasy Premier League dashboard — live scores, provisional bonus, league tables and fixtures",
-  "kinds": ["overlay", "bar-widget"],
+  "description": "Live Premier League scores, table and fixtures \u2014 plus a full Fantasy Premier League dashboard if you play",
+  "kinds": [
+    "overlay",
+    "bar-widget"
+  ],
   "keepLoaded": true,
   "entryPoints": {
     "overlay": "Gaffer.qml",

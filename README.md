@@ -7,11 +7,20 @@ current Omarchy theme.
 
 Two ways to use it, chosen on first run and changeable in settings:
 
-- **FPL Gaffer** — you play the game. Your squad scored live with the captain
-  doubled and auto-subs projected, the bonus race before it's official, your
-  mini-leagues re-scored live, price moves and deadline warnings.
-- **Premier League statto** — you just follow the football. Scores, the table,
-  fixtures and player stats. No fantasy team needed.
+- **FPL Gaffer mode** — you play the game. Eight tabs: your squad as a pitch or
+  a list scored live, the match ticker, the league table, your mini-leagues
+  re-scored live, a fixture difficulty grid, every player in the game, the
+  Monsters board, and news with price and injury watch.
+- **Premier League Fan mode** — you just follow the football. Five tabs: Live,
+  Table, Fixtures, Leaders and News. No fantasy team needed, and nothing that
+  only means something inside the game.
+
+| | FPL Gaffer | Premier League Fan |
+| --- | --- | --- |
+| Squad, Leagues, Players | ✓ | — |
+| Live, Table, Fixtures, News | ✓ | ✓ |
+| Podium board | Monsters — goals, defcon, value, cards, referees | Leaders — goals, tackles, blocks, recoveries, cards, referees |
+| API calls per refresh | 22 | 4 |
 
 ## Install
 
@@ -64,6 +73,8 @@ Standard library Python only — no virtualenv, no build step.
 | `↑` `↓` / `PgUp` `PgDn` | move the selection |
 | type | filter the current tab |
 | `Enter` | act on the selection (stars a player on the watchlist) |
+| double-click a player | show him on the Players tab, selected and scrolled to |
+| click a column heading | rank by it; click again to reverse |
 | `Ctrl+,` | settings |
 | `Ctrl+R` | refresh now |
 | `Esc` | clear the filter, then close |
@@ -97,12 +108,36 @@ somebody else, you have copied the wrong number.
 | `~/.local/state/gaffer/backups/` | previous versions, kept on upgrade |
 | `~/.local/state/gaffer/gafferd.log` | engine log |
 
-`gaffer-ctl.sh stop` stops the background engine.
+`gaffer-ctl.sh stop` stops the background engine, and
+`gaffer-ctl.sh clear-cache` forgets every cached response — the plugin never
+deletes anything on its own.
+
+## The Monsters board
+
+A podium of three for each of ten ways to be remarkable. Most are self
+explanatory; three are worth a note:
+
+- **Dirty Dogs** counts bookings, not fouls. Fouls committed are not in the
+  public API — they live in a per-match feed the game does not publish.
+- **See You Next Tuesday** ranks referees by cards shown. The official comes
+  from the Premier League's own feed, the cards from the fantasy feed; a
+  finished match is looked up once and remembered.
+- There is no set-piece category, because the API records that a player takes
+  penalties but never which goals came from them.
 
 ## Data
 
 Everything comes from the Fantasy Premier League's own public API at
-`fantasy.premierleague.com/api`. It needs no key and no login. It is not a
+`fantasy.premierleague.com/api`. It needs no key and no login. One extra
+field — the name of a match referee — comes from the Premier League's own
+feed at `footballapi.pulselive.com`, which the fantasy API does not publish;
+if that feed is unavailable the referee category goes quiet and nothing else
+notices.
+
+Price-change predictions are not calculated here. The game publishes its own
+projection per player, new for 2026/27, and the plugin reads it: below 20% is
+ignored, 20% and up is listed with a progress bar, and 95% and up raises a
+notification. It is not a
 documented or supported product, so it is treated gently: responses are
 cached, polling backs off when nothing is happening, and the plugin never
 hammers it.

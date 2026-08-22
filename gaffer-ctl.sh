@@ -9,6 +9,7 @@
 #   gaffer-ctl.sh bar on|off [sec]   add/remove the Gaffer readout in the bar
 #                                    layout (~/.config/omarchy/shell.json)
 #   gaffer-ctl.sh stop               stop the background data engine
+#   gaffer-ctl.sh clear-cache        forget every cached API response
 set -e
 
 ID="io.github.weedwhitesandwine.gaffer"
@@ -78,5 +79,21 @@ PY
     ;;
   stop)
     pkill -f "gafferd.py daemon" >/dev/null 2>&1 || true
+    ;;
+  clear-cache)
+    # Cached responses accumulate slowly across a season — mostly one small
+    # file per manager per gameweek from scoring mini-leagues live. Nothing
+    # here is precious; it is all re-fetched on the next refresh. This is a
+    # deliberate, user-run command: the plugin never deletes anything itself.
+    dir="${XDG_STATE_HOME:-$HOME/.local/state}/gaffer/cache"
+    if [[ -d $dir ]]; then
+      before=$(du -sh "$dir" 2>/dev/null | cut -f1)
+      count=$(find "$dir" -maxdepth 1 -name '*.json' | wc -l)
+      find "$dir" -maxdepth 1 -name '*.json' -delete
+      echo "Cleared $count cached responses ($before)."
+      echo "They will be fetched again on the next refresh."
+    else
+      echo "No cache to clear."
+    fi
     ;;
 esac
