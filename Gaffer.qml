@@ -361,9 +361,9 @@ Item {
   }
 
   // Pasting into the team-ID box. The box is a plain readout rather than a
-  // text input, so Ctrl+V has to be handled explicitly; only digits survive,
-  // which means pasting the whole address of your FPL page works as well as
-  // pasting the bare number.
+  // text input, so Ctrl+V has to be handled explicitly. It takes a number,
+  // and that is all: no scraping a number out of whatever else happens to be
+  // on the clipboard.
   Process {
     id: pasteProc
     command: ["wl-paste", "--no-newline"]
@@ -371,8 +371,8 @@ Item {
       id: pasteOut
       waitForEnd: true
       onStreamFinished: {
-        var digits = String(pasteOut.text || "").replace(/[^0-9]/g, "")
-        if (digits) root.draftEntry = digits.slice(0, 10)
+        var pasted = String(pasteOut.text || "").trim()
+        if (/^[0-9]+$/.test(pasted)) root.draftEntry = pasted.slice(0, 10)
       }
     }
   }
