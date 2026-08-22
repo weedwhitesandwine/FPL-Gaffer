@@ -174,10 +174,25 @@ def load_settings():
     return settings
 
 
+def plain(s):
+    """Player names, fixture labels and team news all arrive from the APIs and
+    all end up in a notification. The notification is drawn by the shell, not
+    by us, and it interprets markup in both the summary and the body — the
+    summary through a Text left on AutoText, the body deliberately as
+    StyledText. Neither is ours to pin, so the two characters that turn a
+    string into markup come out before it is handed over. Every Text inside
+    the plugin is pinned to plain text; these are the sinks that cannot be."""
+    return str("" if s is None else s).replace("<", "").replace(">", "")
+
+
 def notify(title, body, urgency="normal", icon="applications-games"):
     try:
         subprocess.Popen(
-            ["notify-send", "-a", "Gaffer", "-u", urgency, "-i", icon, title, body],
+            # `--` matters: a title is a positional argument, and a feed string
+            # that happens to begin with a dash would otherwise be read as an
+            # option by notify-send rather than as the text to show.
+            ["notify-send", "-a", "Gaffer", "-u", urgency, "-i", icon, "--",
+             plain(title), plain(body)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
