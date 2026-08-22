@@ -88,8 +88,46 @@ Item {
       }
       return (Number(b[key] || 0) - Number(a[key] || 0)) * dir
     })
-    return out.slice(0, 300)
+    return out
   }
+
+  // Someone double-clicked this player elsewhere: find him in the current
+  // order, select him and scroll him into the middle of the view.
+  //
+  // Two things make that harder than it looks. The view has no valid height
+  // the instant it is built, so scrolling immediately does nothing; and the
+  // refresh that fires when the overlay opens rebuilds this list a moment
+  // later, which resets the scroll. So the request is held until the scroll
+  // has actually been applied, and re-applied if the rows change underneath
+  // it in the meantime.
+  property int revealIndex: -1
+
+  function tryReveal() {
+    if (!app || !app.pendingPlayerId) return
+    for (var i = 0; i < tab.rows.length; i++) {
+      if (tab.rows[i].id === app.pendingPlayerId) {
+        tab.revealIndex = i
+        app.selectedIndex = i
+        revealTimer.restart()
+        return
+      }
+    }
+  }
+
+  Timer {
+    id: revealTimer
+    interval: 160
+    repeat: false
+    onTriggered: {
+      if (tab.revealIndex < 0 || tab.revealIndex >= tab.rows.length) return
+      list.positionViewAtIndex(tab.revealIndex, ListView.Center)
+      tab.revealIndex = -1
+      if (app) app.pendingPlayerId = 0
+    }
+  }
+
+  onAppChanged: tab.tryReveal()
+  onRowsChanged: tab.tryReveal()
 
   function activate(index) {
     var r = rows[Math.min(index, rows.length - 1)]
@@ -113,8 +151,13 @@ Item {
     anchors.fill: parent
     spacing: Style.spacing.sm
 
-    // Position filter — the one control the columns cannot provide.
+    // Position filter — the one control the columns cannot provide — with a
+    // key for the two markers that appear beside a name.
     Row {
+      width: parent.width
+      spacing: Style.spacing.lg
+
+      Row {
       spacing: Style.space(3)
       Repeater {
         model: ["all", "GKP", "DEF", "MID", "FWD"]
@@ -139,6 +182,45 @@ Item {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             onClicked: { tab.position = modelData; if (app) app.selectedIndex = 0 }
+          }
+        }
+      }
+      }
+
+      Row {
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.spacing.md
+
+        Row {
+          spacing: Style.space(3)
+          Text {
+            text: "P"
+            color: app ? app.accent : "#fff"
+            font.family: app ? app.fontFamily : "monospace"
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+          Text {
+            text: "takes penalties"
+            color: app ? app.fainter : "#888"
+            font.family: app ? app.fontFamily : "monospace"
+            font.pixelSize: Style.font.caption
+          }
+        }
+
+        Row {
+          spacing: Style.space(3)
+          Text {
+            text: "★"
+            color: app ? app.accent : "#fff"
+            font.family: app ? app.fontFamily : "monospace"
+            font.pixelSize: Style.font.caption
+          }
+          Text {
+            text: "on your watchlist — Enter to add"
+            color: app ? app.fainter : "#888"
+            font.family: app ? app.fontFamily : "monospace"
+            font.pixelSize: Style.font.caption
           }
         }
       }

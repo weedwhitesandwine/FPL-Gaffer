@@ -377,6 +377,12 @@ def index_players(boot):
             "fall_pct": fall,
             "pens": e.get("penalties_text") or "",
             "pens_order": e.get("penalties_order"),
+            "corners_order": e.get("corners_and_indirect_freekicks_order"),
+            "fk_order": e.get("direct_freekicks_order"),
+            "clean_sheets": e.get("clean_sheets", 0),
+            "yellow": e.get("yellow_cards", 0),
+            "red": e.get("red_cards", 0),
+            "saves": e.get("saves", 0),
             "ep_next": e.get("ep_next"),
         }
     return players, teams
@@ -451,6 +457,95 @@ def match_detail(fx, players):
                        "yellow_cards", "red_cards", "bonus", "penalties_missed"):
         detail[identifier] = {"home": side(identifier, "h"), "away": side(identifier, "a")}
     return detail
+
+
+# The monsters board: a podium of three for each of nine ways to be
+# remarkable. Ported from the categories Neil's earlier FPL Gaffer used,
+# with one substitution — fouls committed are not in the public API, so the
+# foul-happy category runs on bookings instead, which amounts to the same
+# accusation.
+MONSTER_MINUTES = 90
+
+
+def build_monsters(players):
+    eligible = [p for p in players.values() if (p.get("minutes") or 0) >= MONSTER_MINUTES]
+
+    def card(p, value, suffix=""):
+        return {
+            "id": p["id"], "name": p["web_name"], "team": p["team_short"],
+            "pos": p["pos"], "cost": p["cost"], "points": p["total_points"],
+            "value": value, "suffix": suffix,
+        }
+
+    def top(pool, key, count=3):
+        ranked = sorted(pool, key=lambda p: -float(key(p) or 0))
+        return [p for p in ranked if float(key(p) or 0) > 0][:count]
+
+    def num(field):
+        return lambda p: p.get(field) or 0
+
+    cats = []
+
+    def add(cid, title, glyph, blurb, stat, pool, key, suffix=""):
+        winners = top(pool, key)
+        cats.append({
+            "id": cid, "title": title, "glyph": glyph, "blurb": blurb, "stat": stat,
+            "players": [card(p, key(p), suffix) for p in winners],
+        })
+
+    attackers = [p for p in eligible if p["pos"] in ("MID", "FWD")]
+    def_mids   = [p for p in eligible if p["pos"] in ("DEF", "MID")]
+    defenders  = [p for p in eligible if p["pos"] == "DEF"]
+    back_line  = [p for p in eligible if p["pos"] in ("DEF", "GKP")]
+    keepers    = [p for p in eligible if p["pos"] == "GKP"]
+
+    add("goal", "Goal Monsters", "⚽", "Top scorers this season",
+        "GOALS", attackers, num("goals"))
+    add("defcon", "DefCon Monsters", "⛨", "Defensive contribution machines",
+        "DEFCON", def_mids, num("defcon"))
+    add("closet", "Closet Strikers", "⚑", "Defenders who think they are forwards",
+        "GOALS", defenders, num("goals"))
+    add("assists", "Assist Kings", "♚", "The creators and providers",
+        "ASSISTS", eligible, num("assists"))
+
+    # Set-piece duty is a standing, not a tally: first-choice penalties count
+    # for most, corners and free kicks for less.
+    def sp_score(p):
+        score = 0
+        if (p.get("pens_order") or 99) <= 1:
+            score += 3
+        if (p.get("corners_order") or 99) <= 2:
+            score += 2
+        if (p.get("fk_order") or 99) <= 2:
+            score += 2
+        return score
+
+    sp_pool = sorted([p for p in eligible if sp_score(p) > 0],
+                     key=lambda p: (-sp_score(p), -p["total_points"]))[:3]
+    cats.append({
+        "id": "setpiece", "title": "Set Piece Merchants", "glyph": "⌖",
+        "blurb": "First choice on penalties, corners and free kicks",
+        "stat": "DUTIES",
+        "players": [dict(card(p, sp_score(p)), duties=" ".join(
+            ([" PEN"] if (p.get("pens_order") or 99) <= 1 else [])
+            + (["CRN"] if (p.get("corners_order") or 99) <= 2 else [])
+            + (["FK"] if (p.get("fk_order") or 99) <= 2 else [])).strip())
+                    for p in sp_pool],
+    })
+
+    add("value", "Value Monsters", "◈", "Best return per million spent",
+        "PTS/£m", [p for p in eligible if p["cost"] > 0],
+        lambda p: round(p["total_points"] / p["cost"], 2))
+    add("cleansheet", "Clean Sheet Machines", "▤", "The brick walls",
+        "CLEAN SHEETS", back_line, num("clean_sheets"))
+    add("shotstopper", "Shot Stoppers", "✤", "Keepers earning their money",
+        "SAVES", keepers, num("saves"))
+    add("dirty", "Dirty Dogs", "▬", "The foul-happy merchants",
+        "YELLOWS", eligible, num("yellow"))
+    add("seeya", "See Ya", "▮", "Early bath specialists",
+        "REDS", eligible, num("red"))
+
+    return {"minutes": MONSTER_MINUTES, "categories": cats}
 
 
 def build_league_table(all_fixtures, teams):
@@ -877,6 +972,8 @@ def refresh(settings, previous):
 
     state["bonus_races"] = bonus_races(gw_fixtures, players)
     state["league_table"] = build_league_table(all_fixtures, teams)
+    if mode == "gaffer":
+        state["monsters"] = build_monsters(players)
     state["grid"] = build_fixture_grid(
         all_fixtures, teams, grid_start, int(settings.get("fixtureWeeks") or 6))
 

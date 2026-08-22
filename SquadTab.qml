@@ -302,7 +302,7 @@ Item {
         for (var i = 0; i < tab.rows.length; i++)
           if (tab.rows[i].id === pc.p.id) { app.selectedIndex = i; break }
       }
-      onDoubleClicked: if (app && pc.p) app.toggleWatch(pc.p.id)
+      onDoubleClicked: if (app && pc.p) app.revealPlayer(pc.p.id)
     }
   }
 
@@ -863,7 +863,7 @@ Item {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 onClicked: if (app) app.selectedIndex = listRow.index
-                onDoubleClicked: tab.activate(listRow.index)
+                onDoubleClicked: if (app) app.revealPlayer(listRow.modelData.id)
               }
             }
           }

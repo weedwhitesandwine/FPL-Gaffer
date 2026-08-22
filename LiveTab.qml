@@ -328,6 +328,13 @@ Item {
                   font.pixelSize: Style.font.bodySmall
                   font.bold: modelData.captain
                 }
+
+                // Same gesture as on the pitch: double-click to look him up.
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  onDoubleClicked: if (app) app.revealPlayer(modelData.id)
+                }
               }
             }
           }

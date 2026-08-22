@@ -41,7 +41,8 @@ Item {
     { id: "fixtures", label: "Fixtures", filter: "Filter clubs…",            fpl: false, filterable: true },
     { id: "players",  label: "Players",  filter: "Search players…",          fpl: false, filterable: true },
     { id: "news",     label: "News",     filter: root.statto ? "Filter team news…"
-                                                             : "Filter news and prices…", fpl: false, filterable: true }
+                                                             : "Filter news and prices…", fpl: false, filterable: true },
+    { id: "monsters", label: "Monsters", filter: "",                         fpl: true,  filterable: false }
   ]
   readonly property var tabs: {
     var out = []
@@ -198,6 +199,23 @@ Item {
     Quickshell.execDetached(["bash", "-c",
       'mkdir -p "$(dirname "$2")" && printf "%s\\n" "$1" > "$2"', "--",
       JSON.stringify(root.gsettings), root.stateDir + "/settings.json"])
+  }
+
+  // Jump to a player on the Players tab. Set from the squad and the match
+  // ticker; the Players tab picks it up when it is built and scrolls the man
+  // into view. Cleared once it has been honoured so it cannot fire twice.
+  property int pendingPlayerId: 0
+
+  function revealPlayer(playerId) {
+    if (!playerId) return
+    var target = -1
+    for (var i = 0; i < root.tabs.length; i++)
+      if (root.tabs[i].id === "players") target = i
+    if (target < 0) return
+    root.filterText = ""
+    root.selectedIndex = 0
+    root.pendingPlayerId = playerId
+    root.tabIndex = target
   }
 
   function toggleWatch(playerId) {
@@ -1022,6 +1040,7 @@ Item {
                 case "fixtures": return "FixturesTab.qml"
                 case "players":  return "PlayersTab.qml"
                 case "news":     return "NewsTab.qml"
+                case "monsters": return "MonstersTab.qml"
               }
               return ""
             }

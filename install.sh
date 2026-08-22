@@ -24,7 +24,7 @@ DO_UNINSTALL=0
 
 FILES=(manifest.json qmldir Gaffer.qml GafferState.qml BarWidget.qml Fmt.js
        SquadTab.qml LiveTab.qml TableTab.qml LeaguesTab.qml FixturesTab.qml
-       PlayersTab.qml NewsTab.qml SettingsView.qml
+       PlayersTab.qml NewsTab.qml MonstersTab.qml SettingsView.qml
        gafferd.py gaffer-ctl.sh README.md LICENSE)
 
 # Shipped if present, skipped without complaint if not. preview.png is the
