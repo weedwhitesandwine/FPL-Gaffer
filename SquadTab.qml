@@ -162,11 +162,10 @@ Item {
         width: parent.width
         horizontalAlignment: Text.AlignHCenter
         text: pc.p ? pc.p.name : ""
-        // A doubt still shows in its own fixed colour; everyone else is white.
-        color: pc.p && pc.p.status && pc.p.status !== "a"
-                 ? (pc.p.status === "d" ? (app ? app.cardYellow : "#e3b505")
-                                        : (app ? app.cardRed : "#c62828"))
-                 : (app ? app.shirtText : "#fff")
+        // White always. The badge below already says whether he is a doubt,
+        // and coloured text on a green card is hard to read whatever the
+        // colour — so the badge carries it and the name stays legible.
+        color: app ? app.shirtText : "#fff"
         font.family: app ? app.fontFamily : "monospace"
         font.pixelSize: Style.font.subtitle
         font.bold: pc.p && pc.p.captain
@@ -212,7 +211,7 @@ Item {
             id: flagText
             anchors.centerIn: parent
             text: tab.flag(pc.p)
-            color: pc.p && pc.p.status === "d" ? "#12100a" : "#ffffff"
+            color: app ? app.onCard : "#1a1005"
             font.family: app ? app.fontFamily : "monospace"
             font.pixelSize: Style.font.bodySmall
             font.bold: true
@@ -770,7 +769,7 @@ Item {
                     id: listFlag
                     anchors.centerIn: parent
                     text: tab.flag(listRow.modelData)
-                    color: listRow.modelData.status === "d" ? "#12100a" : "#ffffff"
+                    color: app ? app.onCard : "#1a1005"
                     font.family: app ? app.fontFamily : "monospace"
                     font.pixelSize: Style.font.caption
                     font.bold: true

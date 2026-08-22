@@ -7,7 +7,8 @@ import "Fmt.js" as Fmt
 // matches is a double gameweek, an empty cell is a blank — both worth
 // planning around, and both visible at a glance here.
 //
-// Sorted easiest-run-first so the clubs worth buying from float to the top.
+// Listed alphabetically, so you can find a club without knowing the rule.
+// The AVG column still says how kind the run is, lowest being kindest.
 Item {
   id: tab
   property var app: null
@@ -27,10 +28,9 @@ Item {
     var out = []
     var source = (grid.rows || []).slice()
     source.sort(function(a, b) {
-      if (a.games === 0 && b.games === 0) return 0
-      if (a.games === 0) return 1
-      if (b.games === 0) return -1
-      return a.avg - b.avg
+      var an = String(a.name || "").toLowerCase()
+      var bn = String(b.name || "").toLowerCase()
+      return an < bn ? -1 : (an > bn ? 1 : 0)
     })
     for (var i = 0; i < source.length; i++) {
       var r = source[i]

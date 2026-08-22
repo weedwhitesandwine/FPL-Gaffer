@@ -134,8 +134,13 @@ Item {
   readonly property color fixedOutline: root.lightBackground ? Qt.rgba(0, 0, 0, 0.55)
                                                              : Qt.rgba(1, 1, 1, 0.78)
 
-  readonly property color cardYellow: "#e3b505"
-  readonly property color cardRed:    "#c62828"
+  // A booking is bright. These are the colours of the cards a referee
+  // actually holds up, not muted versions of them.
+  readonly property color cardYellow: "#ffd400"
+  readonly property color cardRed:    "#ff2b2b"
+  // Text sitting on either of those. White on bright red is only 3.7:1;
+  // near-black on both is 5.6:1 or better, and reads like a real card.
+  readonly property color onCard:     "#1a1005"
 
   // The pitch is drawn in fixed colours, not theme colours. A pitch that
   // changes colour with the wallpaper stops reading as a pitch, and the
@@ -773,6 +778,10 @@ Item {
         }
 
         // ----------------------------------------------------- filter field
+        // The overlay always holds the keyboard while it is open, so this is
+        // always the thing you are typing into. It says so with a caret and
+        // a lit edge — without them it reads as a caption and people quite
+        // reasonably conclude it does nothing.
         Rectangle {
           visible: root.view === "list" && root.filterable
           width: parent.width
@@ -780,18 +789,52 @@ Item {
                   ? Math.max(Style.space(26), Style.font.body + Style.spacing.inputPaddingY * 2)
                   : 0
           radius: root.cornerRadius
-          color: Util.alpha(root.foreground, 0.05)
+          color: Util.alpha(root.foreground, root.filterText !== "" ? 0.08 : 0.05)
+          border.width: 1
+          border.color: root.filterText !== "" ? Util.alpha(root.accent, 0.75)
+                                               : Util.alpha(root.foreground, 0.12)
 
-          Text {
-            anchors.fill: parent
+          Row {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: Style.spacing.rowPaddingX
             anchors.rightMargin: Style.spacing.rowPaddingX
-            verticalAlignment: Text.AlignVCenter
-            text: root.filterText !== "" ? root.filterText : root.tabs[root.tabIndex].filter
-            color: root.filterText !== "" ? root.foreground : root.fainter
+            spacing: Style.space(2)
+
+            Text {
+              id: filterEcho
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.filterText !== "" ? root.filterText : root.tabs[root.tabIndex].filter
+              color: root.filterText !== "" ? root.foreground : root.fainter
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              elide: Text.ElideRight
+            }
+
+            Rectangle {
+              anchors.verticalCenter: parent.verticalCenter
+              width: Style.space(2)
+              height: Style.font.body
+              color: root.accent
+              SequentialAnimation on opacity {
+                running: root.opened && root.filterable
+                loops: Animation.Infinite
+                NumberAnimation { from: 1; to: 0; duration: 520 }
+                NumberAnimation { from: 0; to: 1; duration: 520 }
+              }
+            }
+          }
+
+          Text {
+            anchors.right: parent.right
+            anchors.rightMargin: Style.spacing.rowPaddingX
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.filterText !== ""
+            text: "Esc clears"
+            color: root.fainter
             font.family: root.fontFamily
-            font.pixelSize: Style.font.body
-            elide: Text.ElideRight
+            font.pixelSize: Style.font.caption
           }
         }
 
