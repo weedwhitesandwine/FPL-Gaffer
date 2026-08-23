@@ -96,6 +96,16 @@ Item {
   readonly property bool tabScrolls: tabLoader.item
                                      && typeof tabLoader.item.scrollBy === "function"
 
+  // How many rows the tab on screen actually has, so the cursor cannot walk
+  // off the end of it. A tab that keeps no rows reports one, which keeps the
+  // cursor at zero.
+  readonly property int selectableCount: {
+    var it = tabLoader.item
+    if (it && it.rows !== undefined && it.rows !== null && it.rows.length !== undefined)
+      return Math.max(1, it.rows.length)
+    return 1
+  }
+
   // ------------------------------------------------------------------ state
   property var state: ({})
   property var gsettings: ({ greeted: false, appMode: "gaffer", entryId: 0, mode: "center",
@@ -773,7 +783,11 @@ Item {
             event.accepted = true
           } else if (event.key === Qt.Key_Down) {
             if (root.tabScrolls) tabLoader.item.scrollBy(Style.space(60))
-            else root.selectedIndex = root.selectedIndex + 1
+            // Bounded: without a ceiling the cursor ran past the end of the
+            // list, so Up appeared dead until it had been pressed back down
+            // the same number of times, and the pitch lost its highlight.
+            else root.selectedIndex = Math.min(root.selectableCount - 1,
+                                               root.selectedIndex + 1)
             event.accepted = true
           } else if (event.key === Qt.Key_PageUp) {
             if (root.tabScrolls) tabLoader.item.scrollBy(-Style.space(360))
@@ -781,7 +795,8 @@ Item {
             event.accepted = true
           } else if (event.key === Qt.Key_PageDown) {
             if (root.tabScrolls) tabLoader.item.scrollBy(Style.space(360))
-            else root.selectedIndex = root.selectedIndex + 10
+            else root.selectedIndex = Math.min(root.selectableCount - 1,
+                                               root.selectedIndex + 10)
             event.accepted = true
           } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             if (tabLoader.item && typeof tabLoader.item.activate === "function")
@@ -1019,7 +1034,8 @@ Item {
               textFormat: Text.PlainText
               id: filterEcho
               anchors.verticalCenter: parent.verticalCenter
-              text: root.filterText !== "" ? root.filterText : root.tabs[root.tabIndex].filter
+              text: root.filterText !== "" ? root.filterText
+                  : root.tabs[Math.min(root.tabIndex, root.tabs.length - 1)].filter
               color: root.filterText !== "" ? root.foreground : root.fainter
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
@@ -1286,7 +1302,10 @@ Item {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             anchors.rightMargin: Style.spacing.rowPaddingX
-            text: (root.state.live_now ? "live · " : "") + "updated " + Fmt.ago(root.state.updated)
+            // `tick` is what makes "updated N ago" actually advance; without
+            // reading it here the text was fixed until the next state write.
+            text: { root.tick; return (root.state.live_now ? "live · " : "")
+                    + "updated " + Fmt.ago(root.state.updated) }
             color: root.state.live_now ? "#7fe3a8" : "#ffffff"
             font.family: root.fontFamily
             font.pixelSize: Style.font.title

@@ -214,9 +214,9 @@ explanatory; three are worth a note:
 ## Data
 
 Everything comes from the Fantasy Premier League's own public API at
-`fantasy.premierleague.com/api`. It needs no key and no login. One extra
-field — the name of a match referee — comes from the Premier League's own
-feed at `footballapi.pulselive.com`, which the fantasy API does not publish;
+`fantasy.premierleague.com/api`. It needs no key and no login. The match-day detail the fantasy API does not
+publish — the referee, the attendance and the match clock — comes from the
+Premier League's own feed at `footballapi.pulselive.com`;
 if that feed is unavailable the referee category goes quiet and nothing else
 notices.
 

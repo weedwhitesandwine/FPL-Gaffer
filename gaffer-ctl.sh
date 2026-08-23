@@ -17,6 +17,35 @@ BIND_FILE="$HOME/.config/hypr/bindings.lua"
 MARK_IN="-- >>> gaffer hotkey (managed by FPL Gaffer settings — change it there)"
 MARK_OUT="-- <<< gaffer hotkey"
 
+# An opening marker whose closing marker is missing used to swallow every line
+# after it: `skip` was only ever cleared by the terminator, so an unbalanced
+# block ran to the end of the file and the rest of the user's keybindings were
+# deleted without a word. A block that is not a matched, ordered pair is not
+# a block this script understands, so it refuses to touch the file at all.
+check_markers() {
+  local opens closes
+  opens=$(grep -c -- ">>> gaffer hotkey" "$BIND_FILE" || true)
+  closes=$(grep -c -- "<<< gaffer hotkey" "$BIND_FILE" || true)
+  if (( opens != closes )); then
+    echo "gaffer-ctl: refusing to edit $BIND_FILE — its gaffer hotkey block is not a matched pair ($opens opening, $closes closing)" >&2
+    return 1
+  fi
+  if (( opens > 1 )); then
+    echo "gaffer-ctl: refusing to edit $BIND_FILE — $opens gaffer hotkey blocks, expected at most one" >&2
+    return 1
+  fi
+  if (( opens == 1 )); then
+    local o c
+    o=$(grep -n -- ">>> gaffer hotkey" "$BIND_FILE" | head -1 | cut -d: -f1)
+    c=$(grep -n -- "<<< gaffer hotkey" "$BIND_FILE" | head -1 | cut -d: -f1)
+    if (( c < o )); then
+      echo "gaffer-ctl: refusing to edit $BIND_FILE — its gaffer hotkey block closes before it opens" >&2
+      return 1
+    fi
+  fi
+  return 0
+}
+
 strip_block() {
   awk '
     index($0, ">>> gaffer hotkey") { skip = 1; next }
@@ -45,6 +74,7 @@ case "$1" in
     # name, so nothing can have been planted at it.
     tmp=$(mktemp "$BIND_FILE.XXXXXXXX")
     trap 'rm -f "$tmp"' EXIT
+    check_markers || exit 1
     strip_block > "$tmp"
     {
       echo ""
@@ -61,6 +91,7 @@ case "$1" in
     [[ -f $BIND_FILE ]] || exit 0
     tmp=$(mktemp "$BIND_FILE.XXXXXXXX")
     trap 'rm -f "$tmp"' EXIT
+    check_markers || exit 1
     strip_block > "$tmp"
     chmod --reference="$BIND_FILE" "$tmp" 2>/dev/null || chmod 644 "$tmp"
     mv -f "$tmp" "$BIND_FILE"

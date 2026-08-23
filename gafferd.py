@@ -675,6 +675,46 @@ VALID_MIN = {1: 1, 2: 3, 3: 2, 4: 1}
 VALID_MAX = {1: 1, 2: 5, 3: 5, 4: 3}
 
 
+def effective_multipliers(picks, live, fixtures_by_team, chip):
+    """Who actually carries the armband, by element id.
+
+    The API keeps the captain's multiplier until the gameweek is finalised,
+    so a captain who was never on the pitch still counted double — and the
+    vice still counted single — for the rest of the week. FPL moves the
+    armband as soon as the captain's match is over with no minutes; this
+    works out the same answer live, so the score, the bar and every
+    mini-league row agree with the game rather than with the API's lag.
+    """
+    mults = {p["element"]: (p["multiplier"] if p["multiplier"] else 1)
+             for p in picks}
+    if chip == "bboost":
+        pass  # bench boost changes who counts, not who is captain
+
+    cap = next((p for p in picks if p.get("is_captain")), None)
+    vice = next((p for p in picks if p.get("is_vice_captain")), None)
+    if not cap or not vice:
+        return mults
+
+    def played(pick):
+        return live.get(pick["element"], {}).get("minutes", 0) > 0
+
+    def done(pick):
+        games = team_fixtures(fixtures_by_team, pick["_team"])
+        if not games:
+            return True
+        return all(f.get("finished_provisional") for f in games)
+
+    # The armband only moves once the captain's own match is over and he was
+    # not on the pitch. Before that he may still come on.
+    if played(cap) or not done(cap):
+        return mults
+
+    armband = mults.get(cap["element"], 2) or 2
+    mults[cap["element"]] = 1
+    mults[vice["element"]] = armband
+    return mults
+
+
 def project_autosubs(picks, live, fixtures_by_team):
     """Which bench players will come on for team-mates who never played.
 
@@ -685,9 +725,15 @@ def project_autosubs(picks, live, fixtures_by_team):
     bench = [p for p in picks if p["position"] > 11]
 
     def finished(pick):
-        # Only a blank once every one of his club's matches this week is over.
+        # Only a blank once every one of his club's matches this week is over —
+        # or once it is clear there was never a match to play. Requiring a
+        # fixture to exist meant a starter in a blank gameweek was treated as
+        # still to come for the whole week, so no substitute was ever
+        # projected for him and the score stayed short.
         games = team_fixtures(fixtures_by_team, pick["_team"])
-        return bool(games) and all(f.get("finished_provisional") for f in games)
+        if not games:
+            return True
+        return all(f.get("finished_provisional") for f in games)
 
     def minutes(pick):
         return live.get(pick["element"], {}).get("minutes", 0)
@@ -807,7 +853,10 @@ def label_fixtures(fixtures, teams):
         home = teams.get(fx["team_h"], {}).get("short_name", "?")
         away = teams.get(fx["team_a"], {}).get("short_name", "?")
         hs, as_ = fx.get("team_h_score"), fx.get("team_a_score")
-        if fx.get("started") and hs is not None:
+        # Both, not just the home one: a started fixture with one score
+        # reported and the other still null raised on the %d and took the
+        # whole refresh down with it.
+        if fx.get("started") and hs is not None and as_ is not None:
             fx["_label"] = "%s %d-%d %s" % (home, hs, as_, away)
         else:
             fx["_label"] = "%s v %s" % (home, away)
@@ -1100,6 +1149,8 @@ def score_picks(picks_payload, live_stats, prov, players):
     swap_in = {s["on"] for s in subs}
     swap_out = {s["off"] for s in subs}
 
+    mults = effective_multipliers(picks, live_stats, fixtures_by_team, chip)
+
     total = 0
     for p in picks:
         counts = p["position"] <= 11 or chip == "bboost" or p["element"] in swap_in
@@ -1109,7 +1160,7 @@ def score_picks(picks_payload, live_stats, prov, players):
             continue
         stats = live_stats.get(p["element"], {})
         pts = stats.get("total_points", 0) + prov.get(p["element"], 0)
-        total += pts * (p["multiplier"] if p["multiplier"] else 1)
+        total += pts * mults.get(p["element"], 1)
     return total - hits, chip
 
 
@@ -1222,12 +1273,23 @@ def raise_notices(state, previous, settings):
             if not old or fx.get("hs") is None or old.get("hs") is None:
                 continue
             if fx["hs"] != old["hs"] or fx["as"] != old["as"]:
-                scorer = ""
-                detail = fx.get("detail") or {}
-                goals = (detail.get("goals_scored") or {})
-                side = goals.get("home" if fx["hs"] != old["hs"] else "away") or []
-                if side:
-                    scorer = side[-1]["name"]
+                # Who actually just scored: the player whose tally went up
+                # since the last pass. The list is insertion-ordered, not
+                # chronological, so taking the last entry named whoever
+                # happened to sit at the end of it.
+                which = "home" if fx["hs"] != old["hs"] else "away"
+                now_side = ((fx.get("detail") or {}).get("goals_scored")
+                            or {}).get(which) or []
+                was_side = ((old.get("detail") or {}).get("goals_scored")
+                            or {}).get(which) or []
+                was = {g.get("name"): g.get("value", 0) for g in was_side}
+                gained = [g for g in now_side
+                          if g.get("value", 0) > was.get(g.get("name"), 0)]
+                scorer = ", ".join(g["name"] for g in gained if g.get("name"))
+                if not scorer and now_side:
+                    # No usable comparison — better an unnamed goal than a
+                    # confidently wrong name.
+                    scorer = ""
                 # The same clock the app shows: 45+3' rather than a 48th
                 # minute that nobody watching the match would recognise.
                 when = fx.get("clock") or "%d'" % (fx.get("minutes") or 0)
@@ -1267,7 +1329,11 @@ def raise_notices(state, previous, settings):
 
     if wants.get("prices"):
         for row in state.get("price_watch", []):
-            key = "price-%d-%s" % (row["id"], row["direction"])
+            # Dated: without a day in the key a player could raise one rise
+            # and one fall alert for the whole season, because seen.json is
+            # never pruned. Prices move nightly.
+            key = "price-%s-%d-%s" % (now().date().isoformat(),
+                                      row["id"], row["direction"])
             if row["likely"] and not seen.get(key):
                 seen[key] = True
                 arrow = "rising" if row["direction"] == "up" else "falling"
@@ -1293,6 +1359,12 @@ def raise_notices(state, previous, settings):
                 notify("⏰ %d hour%s to the deadline" % (mark, "" if mark == 1 else "s"),
                        body, urgency="critical" if mark <= 3 else "normal")
 
+    # seen.json is a ledger of things already said, and nothing ever removed
+    # anything from it. Keys carrying a date are dropped once they are old
+    # enough that the thing they describe cannot recur.
+    today = now().date().isoformat()
+    seen = {k: v for k, v in seen.items()
+            if not k.startswith("price-") or k[6:16] >= today}
     write_atomic(SEEN_FILE, seen)
 
 
@@ -1546,6 +1618,11 @@ def write_bar(state):
         "captain": state.get("captain"),
         "captain_points": state.get("captain_points"),
         "deadline_in": state.get("deadline_in"),
+        # When this was worked out, so a countdown drawn from it can subtract
+        # the time since rather than showing the same number until the next
+        # write.
+        "deadline_at": (now().timestamp() + state["deadline_in"]
+                        if state.get("deadline_in") else None),
         "chip": state.get("chip"),
         "provisional": not state.get("bonus_added") and state.get("live_now"),
     }
@@ -1662,6 +1739,15 @@ def main():
     while True:
         ok = False
         try:
+            # Compare against what was last WRITTEN, not against what this
+            # process happens to remember. A manual refresh (`gafferd.py
+            # once`, which the panel's refresh button runs) writes a newer
+            # state and raises its own notices; the daemon then still held the
+            # older one, so the next cycle announced the same goal, assist,
+            # red card and news item all over again.
+            on_disk = read_state_file()
+            if on_disk is not None:
+                state = on_disk
             state, ok = cycle(state)
         except Exception as exc:
             log("cycle failed: %s" % exc)

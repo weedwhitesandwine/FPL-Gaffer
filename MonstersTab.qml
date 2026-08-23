@@ -366,7 +366,9 @@ Item {
     anchors.bottom: parent.bottom
     anchors.left: parent.left
     visible: (tab.board.categories || []).length === 0
-    text: "Monsters need " + tab.board.minutes + " minutes played before they count."
+    // The engine emits only `categories`; the minutes qualifier this used to
+    // quote was removed from it, so this line read "needs undefined minutes".
+    text: "No standout performances to show yet."
     color: app ? app.dim : "#aaa"
     font.family: app ? app.fontFamily : "monospace"
     font.pixelSize: Style.font.subtitle

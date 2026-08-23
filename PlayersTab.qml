@@ -108,10 +108,15 @@ Item {
       if (tab.rows[i].id === app.pendingPlayerId) {
         tab.revealIndex = i
         app.selectedIndex = i
+        app.pendingPlayerId = 0
         revealTimer.restart()
         return
       }
     }
+    // Not in the rows as they stand — the position chip filters him out, say.
+    // Left set, it would fire unbidden the next time the rows changed, jumping
+    // the list to a player the user had stopped looking for.
+    app.pendingPlayerId = 0
   }
 
   Timer {

@@ -171,7 +171,10 @@ Item {
           radius: app ? app.cornerRadius : 0
           color: Util.alpha(app ? app.foreground : "#fff", 0.06)
           border.width: 1
-          border.color: app && app.editingEntry ? app.accent : app.hairline
+          // `app` is null until the Loader assigns it, and this is read on the
+          // very first paint — guarding only one half still threw.
+          border.color: !app ? "transparent"
+                      : app.editingEntry ? app.accent : app.hairline
 
           Text {
             textFormat: Text.PlainText

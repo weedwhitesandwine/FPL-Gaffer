@@ -58,10 +58,19 @@ Ui.BarWidget {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
+  // Counts down between engine writes rather than repeating whatever the
+  // last one said. `tick` is what re-evaluates it; without the subtraction it
+  // was a ticking property that never changed, and the tooltip below read the
+  // frozen number straight from the file.
   readonly property real deadlineLeft: {
     root.tick
-    if (!root.barData || root.barData.deadline_in === undefined || root.barData.deadline_in === null) return -1
-    return root.barData.deadline_in
+    if (!root.barData || root.barData.deadline_at === undefined
+        || root.barData.deadline_at === null) {
+      if (!root.barData || root.barData.deadline_in === undefined
+          || root.barData.deadline_in === null) return -1
+      return root.barData.deadline_in
+    }
+    return Math.max(0, root.barData.deadline_at - (Date.now() / 1000))
   }
 
   readonly property bool statto: root.barData && root.barData.mode === "statto"
@@ -158,7 +167,7 @@ Ui.BarWidget {
       if (root.barData.captain) bits.push("Captain " + root.barData.captain
                                       + " on " + root.barData.captain_points)
       if (root.barData.rank) bits.push("Overall rank " + Fmt.commas(root.barData.rank))
-      if (root.barData.deadline_in) bits.push("Deadline in " + Fmt.countdown(root.barData.deadline_in))
+      if (root.deadlineLeft > 0) bits.push("Deadline in " + Fmt.countdown(root.deadlineLeft))
       return root.plain(bits.join("\n"))
     }
     onPressed: function(b) {
