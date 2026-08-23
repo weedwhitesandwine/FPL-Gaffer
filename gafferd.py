@@ -15,11 +15,14 @@ Standard library only, on purpose: this ships inside a desktop plugin and
 should never need a virtualenv.
 """
 
+import errno
 import fcntl
 import json
 import os
+import stat
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -104,7 +107,11 @@ TTL = {
 def log(msg):
     line = "%s  %s\n" % (datetime.now().strftime("%H:%M:%S"), msg)
     try:
-        with open(LOG_FILE, "a") as fh:
+        # O_NOFOLLOW: this file gets truncated when it grows, and truncating
+        # through a symlink planted at its well-known name would truncate
+        # whatever the link points at instead of a log.
+        fd = os.open(LOG_FILE, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "a") as fh:
             fh.write(line)
             if fh.tell() > 512_000:
                 fh.truncate(0)
@@ -125,11 +132,40 @@ def parse_ts(value):
         return None
 
 
+def ensure_dirs():
+    """Create the state and cache directories and confirm they are fit to
+    write into: owned by us, writable by nobody else. Every file this process
+    writes is staged in one of them before being renamed into place, and a
+    directory someone else can write is one where names can be swapped out
+    from under a rename."""
+    os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
+    os.makedirs(CACHE_DIR, mode=0o700, exist_ok=True)
+    for d in (STATE_DIR, CACHE_DIR):
+        st = os.stat(d)
+        if st.st_uid != os.getuid() or (st.st_mode & 0o022):
+            raise RuntimeError(
+                "%s is not an owner-only directory; refusing to write there" % d)
+
+
 def write_atomic(path, payload):
-    tmp = path + ".tmp"
-    with open(tmp, "w") as fh:
-        json.dump(payload, fh, separators=(",", ":"))
-    os.replace(tmp, path)
+    """Replace a file without ever writing through a name an attacker could
+    have planted first. The stage file comes from mkstemp — an unpredictable
+    name, created with O_CREAT|O_EXCL, which never follows a symlink — in the
+    same directory as the destination, then renamed over it in one step. A
+    predictable `path + ".tmp"` would let a pre-planted symlink turn this
+    write into the truncation of whatever the link pointed at."""
+    fd, tmp = tempfile.mkstemp(prefix=".gaffer.", suffix=".tmp",
+                               dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w") as fh:
+            json.dump(payload, fh, separators=(",", ":"))
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 # Ceilings on everything that arrives from outside this process. Nothing either
@@ -153,9 +189,21 @@ MAX_CACHE_BYTES = MAX_WIRE
 
 
 def read_json(path, fallback=None, ceiling=MAX_STATE_BYTES):
+    """Opened without following symlinks and checked to be a regular file
+    first: the state directory is where a restored backup lands, and a
+    symlink or FIFO left at one of these names must not redirect the read or
+    block it forever — open() on a FIFO with no writer simply never returns."""
     try:
-        with open(path, "rb") as fh:
-            raw = fh.read(ceiling + 1)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                return fallback
+            with os.fdopen(fd, "rb") as fh:
+                fd = None
+                raw = fh.read(ceiling + 1)
+        finally:
+            if fd is not None:
+                os.close(fd)
         if len(raw) > ceiling:
             log("%s is larger than %d bytes, ignoring it" % (path, ceiling))
             return fallback
@@ -164,13 +212,31 @@ def read_json(path, fallback=None, ceiling=MAX_STATE_BYTES):
         return fallback
 
 
+def as_int(value, fallback):
+    """Settings values come off disk, and valid JSON of the wrong type must
+    not be able to crash a cycle."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
 def load_settings():
     settings = dict(DEFAULT_SETTINGS)
-    stored = read_json(SETTINGS_FILE, {}, MAX_SETTINGS_BYTES) or {}
+    stored = read_json(SETTINGS_FILE, {}, MAX_SETTINGS_BYTES)
+    if not isinstance(stored, dict):
+        stored = {}
     settings.update({k: v for k, v in stored.items() if k in DEFAULT_SETTINGS})
+    # Each value that gets arithmetic or attribute access done to it is
+    # checked for shape here, once, rather than trusted at every use site.
     notify = dict(DEFAULT_SETTINGS["notify"])
-    notify.update(stored.get("notify") or {})
+    if isinstance(stored.get("notify"), dict):
+        notify.update(stored["notify"])
     settings["notify"] = notify
+    if not isinstance(settings.get("watchlist"), list):
+        settings["watchlist"] = []
+    for key in ("entryId", "fixtureWeeks", "leagueMemberCap"):
+        settings[key] = as_int(settings.get(key), DEFAULT_SETTINGS[key])
     return settings
 
 
@@ -1126,7 +1192,9 @@ def squad_view(picks_payload, live_stats, prov, players, fixtures_by_team, teams
 # ------------------------------------------------------------------- notices
 
 def raise_notices(state, previous, settings):
-    seen = read_json(SEEN_FILE, {}, MAX_SETTINGS_BYTES) or {}
+    seen = read_json(SEEN_FILE, {}, MAX_SETTINGS_BYTES)
+    if not isinstance(seen, dict):
+        seen = {}
     wants = settings["notify"]
     squad = {r["id"]: r for r in state.get("squad", [])}
     before = {r["id"]: r for r in (previous or {}).get("squad", [])}
@@ -1519,14 +1587,24 @@ def cadence(state, ok=True):
 # ----------------------------------------------------------------------- main
 
 def single_instance():
-    fh = open(LOCK_FILE, "w")
+    # O_NOFOLLOW, and no truncation until the lock is actually held: a bare
+    # open(path, "w") both follows a symlink planted at this well-known name
+    # and truncates its target before the lock is even attempted.
     try:
-        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fd = os.open(LOCK_FILE, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    except OSError as e:
+        if e.errno == errno.ELOOP:
+            log("refusing lock file that is a symlink: %s" % LOCK_FILE)
+            return None
+        raise
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
+        os.close(fd)
         return None
-    fh.write(str(os.getpid()))
-    fh.flush()
-    return fh
+    os.ftruncate(fd, 0)
+    os.write(fd, str(os.getpid()).encode())
+    return fd
 
 
 def cycle(previous):
@@ -1548,13 +1626,21 @@ def cycle(previous):
     return state, True
 
 
+def read_state_file():
+    """The previous state, or None. Shape-checked here because valid JSON of
+    the wrong type would otherwise reach cadence() and the notify pass, both
+    of which assume a dictionary."""
+    state = read_json(STATE_FILE)
+    return state if isinstance(state, dict) else None
+
+
 def main():
     # First run creates the data directory the installer told the user about.
-    os.makedirs(CACHE_DIR, exist_ok=True)
+    ensure_dirs()
     mode = sys.argv[1] if len(sys.argv) > 1 else "once"
 
     if mode == "status":
-        state = read_json(STATE_FILE, {}) or {}
+        state = read_state_file() or {}
         print("GW%s  %s pts  rank %s  live=%s  updated %s" % (
             state.get("gw"), state.get("live_points"), state.get("overall_rank"),
             state.get("live_now"), state.get("updated")))
@@ -1563,7 +1649,7 @@ def main():
     if mode == "once":
         global MANUAL
         MANUAL = True
-        cycle(read_json(STATE_FILE))
+        cycle(read_state_file())
         return
 
     lock = single_instance()
@@ -1572,7 +1658,7 @@ def main():
         return
 
     log("gafferd started")
-    state = read_json(STATE_FILE)
+    state = read_state_file()
     while True:
         ok = False
         try:

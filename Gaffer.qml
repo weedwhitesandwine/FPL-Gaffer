@@ -198,15 +198,26 @@ Item {
   }
 
   // ------------------------------------------------------------- persistence
+  // Both writes go to an exclusively-created temporary name beside the file,
+  // then rename over it: a bare `>` redirection truncates whatever already
+  // sits at that path — including the target of a symlink a restored backup
+  // could have left there — before the new content lands. `-O` confirms the
+  // state directory is ours before anything is staged in it.
   function saveSize() {
     Quickshell.execDetached(["bash", "-c",
-      'mkdir -p "$(dirname "$1")" && printf "%s\\n" "$2" > "$1"', "--",
+      'd=$(dirname "$1") && mkdir -p "$d" && [ -O "$d" ] && t=$(mktemp "$1.XXXXXXXX") && printf "%s\\n" "$2" > "$t" && mv -f "$t" "$1"', "--",
       root.sizeFile, root.cardWidth + "x" + root.cardHeight])
   }
 
+  // Nothing is written until the settings have been read back at least once:
+  // the state file usually loads first, and persisting from a handler before
+  // then would write the in-memory defaults over the user's real choices.
+  property bool settingsLoaded: false
+
   function saveSettings() {
+    if (!root.settingsLoaded) return
     Quickshell.execDetached(["bash", "-c",
-      'mkdir -p "$(dirname "$2")" && printf "%s\\n" "$1" > "$2"', "--",
+      'd=$(dirname "$2") && mkdir -p "$d" && [ -O "$d" ] && t=$(mktemp "$2.XXXXXXXX") && printf "%s\\n" "$1" > "$t" && mv -f "$t" "$2"', "--",
       JSON.stringify(root.gsettings), root.stateDir + "/settings.json"])
   }
 
@@ -359,7 +370,7 @@ Item {
       onStreamFinished: {
         try {
           var s = JSON.parse(text)
-          if (s && typeof s === "object") { root.state = s; root.loaded = true }
+          if (s && typeof s === "object" && !Array.isArray(s)) { root.state = s; root.loaded = true }
         } catch (e) {}
       }
     }
@@ -374,10 +385,14 @@ Item {
       onStreamFinished: {
         try {
           var s = JSON.parse(text)
-          if (s && typeof s === "object") root.gsettings = s
+          if (s && typeof s === "object" && !Array.isArray(s)) root.gsettings = s
         } catch (e) {}
       }
     }
+    // No settings file yet is a perfectly good answer: it means first run,
+    // and the defaults in memory are the truth. Either way the answer is in,
+    // and settings may now be written back.
+    onExited: root.settingsLoaded = true
   }
 
   Process {

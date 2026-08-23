@@ -83,7 +83,7 @@ Ui.BarWidget {
       onStreamFinished: {
         try {
           var b = JSON.parse(text)
-          if (b && typeof b === "object") root.barData = b
+          if (b && typeof b === "object" && !Array.isArray(b)) root.barData = b
         } catch (e) {}
       }
     }

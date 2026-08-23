@@ -72,7 +72,7 @@ have to read the source to find that out.
 | `bash gaffer-ctl.sh bind`/`unbind` | only when you change the hotkey in settings |
 | `hyprctl reload` | only from those two, after editing the hotkey block |
 | `kill <recorded pid>` | only from `gaffer-ctl.sh stop`, which you run — it kills the pid in its own lock file after checking that pid really is the engine, never a name pattern |
-| `bash -c` writing one file | when you change a setting or resize the window — it writes `settings.json` or the size file inside `~/.local/state/gaffer`. Values are passed as positional arguments (`--`, then `"$1"`/`"$2"`), never interpolated into the shell string |
+| `bash -c` writing one file | when you change a setting or resize the window — it writes `settings.json` or the size file inside `~/.local/state/gaffer`, staged under an exclusively-created temporary name (`mktemp`) and renamed into place. Values are passed as positional arguments (`--`, then `"$1"`/`"$2"`), never interpolated into the shell string |
 
 Nothing else. No package manager, no installer, no downloader, no shell
 pipeline built from remote data.
@@ -92,9 +92,9 @@ finishing the first-run greeter does not rewrite either of them. It deletes
 nothing on its own; clearing the cache is a command you run
 (`gaffer-ctl.sh clear-cache`).
 
-**Privileges: none.** It never asks for a password, never uses `sudo` or
-`pkexec`, and does nothing as root. It does not start a second Quickshell
-process.
+**Privileges: none.** Everything it runs is listed above, and every one of
+those processes runs as your own user — it never asks for a password. It does
+not start a second Quickshell process.
 
 **Network: yes, and this is the point of it.** Two hosts, plain HTTPS GET,
 unauthenticated and read-only:
@@ -119,6 +119,16 @@ an over-sized reply is treated exactly like a failed request, falling back to
 the last good copy on disk. Every piece of text the overlay draws is pinned to
 plain text, so a name or a news line arriving from either API is displayed as
 the characters it contains and never interpreted as markup.
+
+The same suspicion applies to the disk. Every file the engine replaces —
+state, cache, the bar readout, the seen-notifications list — is staged under
+an unpredictable name created exclusively (`mkstemp`, which never follows a
+symlink) in a directory first verified to be owned by the user and writable by
+nobody else, then renamed over the destination in one atomic step. Reads
+refuse symlinks and non-regular files, so a link or FIFO left at one of these
+names by a restored backup cannot redirect a write onto another file or park a
+read forever, and the lock and log files are opened with the same no-follow
+guarantee before anything truncates them.
 
 **Timer: yes.** The engine polls on an interval, because live scores are the
 purpose. It adapts: roughly once a minute while matches are actually being
