@@ -119,6 +119,58 @@ def log(msg):
         pass
 
 
+_cache_pruned_at = 0.0
+
+
+def prune_cache(force=False):
+    """Drop cache entries that have outlived their usefulness: anything past
+    the age limit, and — if the directory is still too big — the oldest first
+    until it is under the ceiling. A missing entry costs one re-fetch."""
+    global _cache_pruned_at
+    when = time.time()
+    if not force and (when - _cache_pruned_at) < CACHE_PRUNE_EVERY:
+        return 0
+    _cache_pruned_at = when
+    removed = 0
+    entries = []
+    try:
+        names = os.listdir(CACHE_DIR)
+    except OSError:
+        return 0
+    for name in names:
+        path = os.path.join(CACHE_DIR, name)
+        try:
+            st = os.lstat(path)
+        except OSError:
+            continue
+        if not stat.S_ISREG(st.st_mode):
+            continue
+        if when - st.st_mtime > MAX_CACHE_AGE:
+            try:
+                os.unlink(path)
+                removed += 1
+            except OSError:
+                pass
+            continue
+        entries.append((st.st_mtime, st.st_size, path))
+
+    total = sum(e[1] for e in entries)
+    if total > MAX_CACHE_TOTAL:
+        entries.sort()                      # oldest first
+        for _, size, path in entries:
+            if total <= MAX_CACHE_TOTAL:
+                break
+            try:
+                os.unlink(path)
+                total -= size
+                removed += 1
+            except OSError:
+                pass
+    if removed:
+        log("pruned %d cache entries" % removed)
+    return removed
+
+
 def now():
     return datetime.now(timezone.utc)
 
@@ -186,6 +238,14 @@ MAX_UNPACKED = 32 * 1024 * 1024   # bytes accepted after decompression
 MAX_SETTINGS_BYTES = 64 * 1024
 MAX_STATE_BYTES = 8 * 1024 * 1024
 MAX_CACHE_BYTES = MAX_WIRE
+# The cache is one file per API path, and mini-league standings mean one file
+# per rival manager per gameweek — 1,713 of them in two days on a real
+# account, and nothing ever removed one. Left alone that is tens of thousands
+# of files and a gigabyte or more across a season, for data that is re-fetched
+# the moment it is wanted. Anything older than this has served its purpose.
+MAX_CACHE_AGE = 3 * 24 * 3600
+MAX_CACHE_TOTAL = 64 * 1024 * 1024
+CACHE_PRUNE_EVERY = 3600
 
 
 def read_json(path, fallback=None, ceiling=MAX_STATE_BYTES):
@@ -1745,6 +1805,7 @@ def main():
             # state and raises its own notices; the daemon then still held the
             # older one, so the next cycle announced the same goal, assist,
             # red card and news item all over again.
+            prune_cache()
             on_disk = read_state_file()
             if on_disk is not None:
                 state = on_disk
