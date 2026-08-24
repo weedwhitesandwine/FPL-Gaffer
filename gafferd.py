@@ -1531,7 +1531,6 @@ def refresh(settings, previous):
             state["players_to_play"] = sum(1 for r in rows if r["counting"] and r["to_play"])
             state["captain"] = next((r["name"] for r in rows if r["captain"]), None)
             state["captain_points"] = next((r["applied"] for r in rows if r["captain"]), 0)
-            state["bench_points"] = sum(r["points"] + r["provisional"] for r in rows if r["benched"])
 
         history = fetch("/entry/%d/history/" % entry_id, "history", False)
         if history:

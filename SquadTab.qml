@@ -80,9 +80,13 @@ Item {
 
   // -------------------------------------------------------------- summary
   component Stat: Column {
+    id: stat
     property string k: ""
     property string v: ""
     property color tone: app ? app.foreground : "#fff"
+    // Short values (a transfer count) look stranded against a long label,
+    // so they can sit under the middle of it instead of its left edge.
+    property bool centred: false
     spacing: Style.space(1)
     Text {
       textFormat: Text.PlainText
@@ -93,6 +97,7 @@ Item {
     }
     Text {
       textFormat: Text.PlainText
+      anchors.horizontalCenter: stat.centred ? stat.horizontalCenter : undefined
       text: parent.v
       color: parent.tone
       font.family: app ? app.fontFamily : "monospace"
@@ -340,10 +345,10 @@ Item {
           k: "Captain"
           v: (tab.st.captain || "—") + (tab.st.captain_points ? "  " + tab.st.captain_points : "")
         }
-        Stat { k: "Bench"; v: (tab.st.bench_points !== undefined ? tab.st.bench_points + " pts" : "—") }
         Stat { k: "Value"; v: Fmt.money(tab.st.value) + " · " + Fmt.money(tab.st.bank) + " itb" }
         Stat {
           k: "Transfers"
+          centred: true
           v: (tab.st.transfers || 0) + (tab.st.hits ? "  −" + tab.st.hits : "")
           tone: tab.st.hits ? (app ? app.badColor : "#a33") : (app ? app.foreground : "#fff")
         }

@@ -160,11 +160,16 @@ Item {
           width: parent.width
           height: Math.max(Style.font.display, Style.space(30))
 
-          readonly property int sideWidth: (width - Style.space(120) - Style.space(150)) / 2
+          // The clock and stake sit in a 150-wide gutter on the right, so the
+          // same gutter is left empty on the left: without it the scoreline
+          // centres on what is left of the row and reads visibly off-centre.
+          readonly property int gutter: Style.space(150)
+          readonly property int sideWidth: (width - Style.space(120) - gutter * 2) / 2
 
           Text {                                            // home club
             textFormat: Text.PlainText
-            anchors.left: parent.left
+            anchors.right: parent.horizontalCenter
+            anchors.rightMargin: Style.space(60)
             anchors.verticalCenter: parent.verticalCenter
             width: parent.sideWidth
             horizontalAlignment: Text.AlignRight
@@ -178,8 +183,7 @@ Item {
 
           Text {                                            // score, or "v"
             textFormat: Text.PlainText
-            anchors.left: parent.left
-            anchors.leftMargin: parent.sideWidth
+            anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter: parent.verticalCenter
             width: Style.space(120)
             horizontalAlignment: Text.AlignHCenter
@@ -193,8 +197,8 @@ Item {
 
           Text {                                            // away club
             textFormat: Text.PlainText
-            anchors.left: parent.left
-            anchors.leftMargin: parent.sideWidth + Style.space(120)
+            anchors.left: parent.horizontalCenter
+            anchors.leftMargin: Style.space(60)
             anchors.verticalCenter: parent.verticalCenter
             width: parent.sideWidth
             text: card.fx.away_name || card.fx.away
