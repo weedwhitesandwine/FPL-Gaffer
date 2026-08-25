@@ -297,6 +297,14 @@ def load_settings():
         settings["watchlist"] = []
     for key in ("entryId", "fixtureWeeks", "leagueMemberCap"):
         settings[key] = as_int(settings.get(key), DEFAULT_SETTINGS[key])
+    # A number is not yet a sensible number. The fixture grid is built column
+    # by column from this, and settings.json can be hand-edited or restored
+    # from a backup: at twenty thousand weeks the engine spends three seconds
+    # a cycle building a state file too large for the overlay's own read
+    # ceiling, so the panel sits frozen on stale data. There are 38 gameweeks
+    # in a season and the grid is a planning aid, not an archive.
+    settings["fixtureWeeks"] = max(1, min(20, settings["fixtureWeeks"]))
+    settings["leagueMemberCap"] = max(1, min(2000, settings["leagueMemberCap"]))
     return settings
 
 
@@ -1177,8 +1185,14 @@ def fetch_league(league_id, live, cap, players, live_stats, prov, entry_id, summ
         for row in rows:
             # Your own team stays on the short cache; everyone else's is
             # locked and read once.
-            picks = fetch("/entry/%d/event/%d/picks/" % (row["entry"], gw),
-                          "picks" if row["entry"] == entry_id else "picks_locked", live)
+            # The id comes off the wire, and %d on a string raises rather
+            # than returning a wrong answer — one malformed row would cost the
+            # whole league table until the cache expired.
+            rival = as_int(row.get("entry"), 0)
+            if not rival:
+                continue
+            picks = fetch("/entry/%d/event/%d/picks/" % (rival, gw),
+                          "picks" if rival == entry_id else "picks_locked", live)
             if not picks:
                 continue
             score, chip = score_picks(picks, live_stats, prov, players)

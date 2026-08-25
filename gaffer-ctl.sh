@@ -72,10 +72,20 @@ check_markers() {
 }
 
 strip_block() {
+  # The block is written with a blank line above it, for legibility. That
+  # blank is ours, so it has to come out with the block — stripping only the
+  # marked lines left one behind on every re-bind, and three hotkey changes
+  # meant three orphan blank lines accumulating in a file the README promises
+  # is otherwise untouched. Blank lines the user has of their own are held and
+  # re-emitted; exactly one, immediately above the opening marker, is dropped.
   awk '
-    index($0, ">>> gaffer hotkey") { skip = 1; next }
+    function flush(  i) { for (i = 0; i < pending; i++) print ""; pending = 0 }
+    index($0, ">>> gaffer hotkey") { if (pending > 0) pending--; flush(); skip = 1; next }
     index($0, "<<< gaffer hotkey") { skip = 0; next }
-    !skip { print }
+    skip { next }
+    $0 == "" { pending++; next }
+    { flush(); print }
+    END { flush() }
   ' "$BIND_FILE"
 }
 
@@ -142,70 +152,93 @@ import json, os, stat, sys, tempfile
 state = sys.argv[1]
 sec = sys.argv[2] if sys.argv[2] in ("left", "center", "right") else "right"
 ID = "io.github.weedwhitesandwine.gaffer"
-p = os.path.expanduser("~/.config/omarchy/shell.json")
+
+def refuse(why):
+    sys.stderr.write("gaffer-ctl: leaving shell.json alone — %s\n" % why)
+    raise SystemExit(1)
+
+link = os.path.expanduser("~/.config/omarchy/shell.json")
+# A dotfiles manager (stow, chezmoi) puts a symlink at this name pointing into
+# its own repository. Refusing every symlink meant those users could not turn
+# the readout on at all — and the refusal was silent, so the settings card
+# reported success while nothing had happened. Resolve the name and work on
+# the file it really is, the same way the hotkey block does: the link
+# survives, the repository stays the thing that owns the content, and a link
+# pointing at something that is not the user's own is still refused.
+p = os.path.realpath(link)
+home_cfg = os.path.dirname(p)
+try:
+    st = os.stat(home_cfg)
+except OSError:
+    refuse("%s is not a directory this script can reach" % home_cfg)
+if st.st_uid != os.getuid() or (st.st_mode & 0o022):
+    refuse("%s is not yours, or is writable by others" % home_cfg)
+
 # shell.json belongs to the user, not to this plugin, and it is read back
 # before it is rewritten — so it gets the ceiling every other read here has,
 # put at the read, with the extra byte that identifies an over-sized file.
 # Refusing means leaving the file exactly as it stands, which is the right
 # answer for a file this script cannot make sense of. The open refuses
-# symlinks and non-regular files, so a planted link cannot redirect the read
-# and a FIFO cannot block it forever.
+# symlinks and non-regular files, so a link planted at the resolved name
+# cannot redirect the read and a FIFO cannot block it forever.
 MAX_SHELL_JSON = 4 * 1024 * 1024
 try:
     fd = os.open(p, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-    try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
-            raise SystemExit
-        with os.fdopen(fd, "rb") as f:
-            fd = None
-            raw = f.read(MAX_SHELL_JSON + 1)
-    finally:
-        if fd is not None:
-            os.close(fd)
-    if len(raw) > MAX_SHELL_JSON:
-        raise SystemExit
+except OSError as exc:
+    refuse("cannot read %s (%s)" % (p, exc.strerror))
+try:
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        refuse("%s is not a regular file" % p)
+    with os.fdopen(fd, "rb") as f:
+        raw = f.read(MAX_SHELL_JSON + 1)
+except OSError as exc:
+    refuse("cannot read %s (%s)" % (p, exc.strerror))
+if len(raw) > MAX_SHELL_JSON:
+    refuse("%s is larger than %d bytes" % (p, MAX_SHELL_JSON))
+if os.stat(p).st_uid != os.getuid():
+    refuse("%s is not yours" % p)
+try:
     d = json.loads(raw.decode("utf-8", "replace"))
-except SystemExit:
-    raise
-except Exception:
-    raise SystemExit
+except ValueError:
+    refuse("%s is not valid JSON" % p)
+
 # Valid JSON of the wrong shape is not a config file, and setdefault will
-# happily hand back a string to be subscripted. Each level is checked.
+# happily hand back a string to be subscripted. Each level is checked, and
+# nothing is created that the entry does not actually need: turning the
+# readout on adds the one section it goes into, turning it off adds the
+# plugins list it goes into, and no other key is invented on the way past.
 if not isinstance(d, dict):
-    raise SystemExit
+    refuse("%s is not a JSON object" % p)
 def eid(w): return w.get("id") if isinstance(w, dict) else w
-if not isinstance(d.get("bar"), dict):
-    d["bar"] = {}
-bar = d["bar"]
-if not isinstance(bar.get("layout"), dict):
-    bar["layout"] = {}
-lay = bar["layout"]
-for s in ("left", "center", "right"):
-    if not isinstance(lay.get(s), list):
-        lay[s] = []
-for s in lay:
-    if isinstance(lay[s], list):
-        lay[s] = [w for w in lay[s] if eid(w) != ID]
-if not isinstance(d.get("plugins"), list):
-    d["plugins"] = []
-d["plugins"] = [w for w in d["plugins"] if eid(w) != ID]
+bar = d.get("bar")
+lay = bar.get("layout") if isinstance(bar, dict) else None
+if isinstance(lay, dict):
+    for s in lay:
+        if isinstance(lay[s], list):
+            lay[s] = [w for w in lay[s] if eid(w) != ID]
+if isinstance(d.get("plugins"), list):
+    d["plugins"] = [w for w in d["plugins"] if eid(w) != ID]
+
 if state == "on":
-    lay[sec].append({"id": ID})
+    if not isinstance(d.get("bar"), dict):
+        d["bar"] = {}
+    if not isinstance(d["bar"].get("layout"), dict):
+        d["bar"]["layout"] = {}
+    if not isinstance(d["bar"]["layout"].get(sec), list):
+        d["bar"]["layout"][sec] = []
+    d["bar"]["layout"][sec].append({"id": ID})
 else:
+    if not isinstance(d.get("plugins"), list):
+        d["plugins"] = []
     d["plugins"].append({"id": ID})
+
 # Staged under an unpredictable name created exclusively by mkstemp — which
 # never follows a symlink — in a directory verified to be owned by us and
 # writable by nobody else, then renamed over the destination in one step.
 # Writing in place would truncate the user's shell configuration before
 # rebuilding it, and a predictable stage name would let a pre-planted symlink
 # turn this write into the truncation of whatever the link pointed at.
-home_cfg = os.path.dirname(p)
-try:
-    st = os.stat(home_cfg)
-    if st.st_uid != os.getuid() or (st.st_mode & 0o022):
-        raise SystemExit
-except OSError:
-    raise SystemExit
 fd, tmp = tempfile.mkstemp(prefix=".shell.json.", suffix=".tmp", dir=home_cfg)
 try:
     with os.fdopen(fd, "w") as f:

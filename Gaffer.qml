@@ -246,10 +246,12 @@ Item {
   // then rename over it: a bare `>` redirection truncates whatever already
   // sits at that path — including the target of a symlink a restored backup
   // could have left there — before the new content lands. `-O` confirms the
-  // state directory is ours before anything is staged in it.
+  // state directory is ours, and the mode check that it is writable by
+  // nobody else, before anything is staged in it — the same pair the
+  // control script and the engine both apply.
   function saveSize() {
     Quickshell.execDetached(["bash", "-c",
-      'd=$(dirname "$1") && mkdir -p "$d" && [ -O "$d" ] && t=$(mktemp "$1.XXXXXXXX") && printf "%s\\n" "$2" > "$t" && mv -f "$t" "$1"', "--",
+      'd=$(dirname "$1") && mkdir -p "$d" && [ -O "$d" ] && [ "$(( 8#$(stat -c %a "$d") & 8#022 ))" -eq 0 ] && t=$(mktemp "$1.XXXXXXXX") && printf "%s\\n" "$2" > "$t" && mv -f "$t" "$1"', "--",
       root.sizeFile, root.cardWidth + "x" + root.cardHeight])
   }
 
@@ -261,7 +263,7 @@ Item {
   function saveSettings() {
     if (!root.settingsLoaded) return
     Quickshell.execDetached(["bash", "-c",
-      'd=$(dirname "$2") && mkdir -p "$d" && [ -O "$d" ] && t=$(mktemp "$2.XXXXXXXX") && printf "%s\\n" "$1" > "$t" && mv -f "$t" "$2"', "--",
+      'd=$(dirname "$2") && mkdir -p "$d" && [ -O "$d" ] && [ "$(( 8#$(stat -c %a "$d") & 8#022 ))" -eq 0 ] && t=$(mktemp "$2.XXXXXXXX") && printf "%s\\n" "$1" > "$t" && mv -f "$t" "$2"', "--",
       JSON.stringify(root.gsettings), root.stateDir + "/settings.json"])
   }
 
@@ -474,12 +476,27 @@ Item {
     command: ["setpriv", "--pdeathsig", "TERM",
               "python3", root.pluginDir + "/gafferd.py", "daemon"]
     running: true
-    onExited: daemonRestart.restart()
+    Component.onCompleted: root.daemonStartedAt = Date.now()
+    onRunningChanged: if (running) root.daemonStartedAt = Date.now()
+    // An engine that dies because of something wrong with the machine rather
+    // than with this particular run — no python, a state directory that is
+    // not ours — used to be started again every ten seconds for the length of
+    // the session: a doomed process a hundred times an hour, and a log line
+    // with each. Back away instead, and return to ten seconds as soon as one
+    // has lived long enough to have been doing its job.
+    onExited: {
+      var lived = Date.now() - root.daemonStartedAt
+      root.daemonWait = lived > 60000 ? 10000 : Math.min(300000, root.daemonWait * 2)
+      daemonRestart.restart()
+    }
   }
+
+  property real daemonStartedAt: 0
+  property int daemonWait: 10000
 
   Timer {
     id: daemonRestart
-    interval: 10000
+    interval: root.daemonWait
     onTriggered: daemon.running = true
   }
 

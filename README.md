@@ -63,8 +63,8 @@ you want a clean slate.
 ## What it writes, and when
 
 Everything this plugin runs and touches, in full — because a plugin shares the
-shell's process and runs unsandboxed with your permissions, and you should not
-have to read the source to find that out.
+shell's process and runs with the same permissions your session already has,
+and you should not have to read the source to find that out.
 
 **Processes it runs**
 
@@ -80,8 +80,21 @@ have to read the source to find that out.
 | `kill <recorded pid>` | only from `gaffer-ctl.sh stop`, which you run — it kills the pid in its own lock file after checking that pid really is the engine, never a name pattern |
 | `bash -c` writing one file | when you change a setting or resize the window — it writes `settings.json` or the size file inside `~/.local/state/gaffer`, staged under an exclusively-created temporary name (`mktemp`) and renamed into place. Values are passed as positional arguments (`--`, then `"$1"`/`"$2"`), never interpolated into the shell string |
 
-Nothing else. No package manager, no installer, no downloader, no shell
-pipeline built from remote data.
+That table is the complete list. Every one of those commands runs as your own
+user, takes the values it needs as positional arguments rather than as text
+spliced into a shell string, and exits as soon as it has done its job — the
+engine on the first row is the only long-lived one.
+
+**What it needs installed**
+
+Everything in that table comes from packages an Omarchy desktop already has:
+`python3`, `setpriv` (util-linux), `bash`, `hyprctl` (Hyprland),
+`notify-send` (libnotify) and `wl-paste` (wl-clipboard). The first three are
+what the plugin needs to work at all — the engine is Python, and the shell
+starts it under setpriv. The rest are each tied to one feature: `notify-send`
+to the notifications you switch on, `wl-paste` to the paste button in the
+team-ID box, `hyprctl` to reloading Hyprland after a hotkey change. If one of
+those three is missing, that one feature is what stops working.
 
 **Files it writes**
 
@@ -90,17 +103,24 @@ pipeline built from remote data.
 | its own plugin folder | never, after `omarchy plugin add` clones it |
 | `~/.local/state/gaffer/` — settings, state, cache, log | continuously, while running |
 | `~/.config/hypr/bindings.lua` | **only if you set a hotkey**, and only inside its own marked block, leaving every other line untouched |
-| `~/.config/omarchy/shell.json` | **only if you turn the bar readout on or off**, and only its own entry |
+| `~/.config/omarchy/shell.json` | **only if you turn the bar readout on or off**. It adds, moves or removes its own entry and leaves every other setting as it found it, though the file is rewritten as standard JSON with two-space indentation. Where a dotfiles manager has symlinked this path into its own repository, the link is resolved and the real file written, so the link survives |
 
 Those last two are the only files outside its own directory it will ever
 touch, and neither is written unless you change that specific setting —
-finishing the first-run greeter does not rewrite either of them. It deletes
-nothing on its own; clearing the cache is a command you run
-(`gaffer-ctl.sh clear-cache`).
+finishing the first-run greeter does not rewrite either of them.
 
-**Privileges: none.** Everything it runs is listed above, and every one of
-those processes runs as your own user — it never asks for a password. It does
-not start a second Quickshell process.
+The only files it ever deletes are its own cached API responses, in
+`~/.local/state/gaffer/cache/`: on each cycle the engine drops anything older
+than three days, and then the oldest first while that folder is over 64 MB, so
+a cache cannot grow without limit on a machine left running for months.
+`gaffer-ctl.sh clear-cache` empties the same folder in one go. Nothing outside
+it is ever removed.
+
+**Privileges.** Every process in the table runs as your own user, with the
+permissions your session already has. `setpriv` is in that list for one
+reason — `--pdeathsig TERM`, which ties the engine's life to the shell's. It
+changes no user, grants no capability and drops none. The overlay and the bar
+readout both draw inside the shell's own Quickshell process.
 
 **Network: yes, and this is the point of it.** Two hosts, plain HTTPS GET,
 unauthenticated and read-only:
@@ -114,9 +134,10 @@ unauthenticated and read-only:
   publishes bookings late or not at all, so where the league reports something
   directly, its version is used. Only matches actually in play are looked up.
 
-Nothing is ever uploaded, posted or reported. Your team number is used only to
-build the URL of your own public team page. There is no account, no key, no
-telemetry, and no third party.
+Every request is a GET, and the only value of yours that ever appears in one
+is your team number, which forms the URL of your own public team page. The two
+hosts above are the only ones contacted, and the replies are read, cached on
+your disk and drawn.
 
 Neither feed is trusted to behave. A reply is refused above 8 MB on the wire
 and above 32 MB once unpacked, so neither an oversized response nor a small
@@ -201,8 +222,10 @@ somebody else, you have copied the wrong number.
 | `~/.local/state/gaffer/gafferd.log` | engine log |
 
 `gaffer-ctl.sh stop` stops the background engine, and
-`gaffer-ctl.sh clear-cache` forgets every cached response — the plugin never
-deletes anything on its own.
+`gaffer-ctl.sh clear-cache` forgets every cached response. The engine also
+prunes that cache folder as it runs — entries older than three days, and the
+oldest first while it is over 64 MB — which is the only deleting the plugin
+does.
 
 ## The Monsters board
 
