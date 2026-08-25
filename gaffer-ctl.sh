@@ -47,24 +47,30 @@ resolve_bind_file() {
   printf '%s' "$real"
 }
 
+# Both of these read the file the write is going to land on — the resolved
+# one — rather than the name it was reached by. Inspecting through the link
+# and writing to its target leaves a window in which the link can be swung at
+# another readable file between the two, and its contents would then be
+# copied into bindings.lua. It takes somebody already writing this home
+# directory, but the resolved path costs nothing and closes it.
 check_markers() {
-  local opens closes
-  opens=$(grep -c -- ">>> gaffer hotkey" "$BIND_FILE" || true)
-  closes=$(grep -c -- "<<< gaffer hotkey" "$BIND_FILE" || true)
+  local file="$1" opens closes
+  opens=$(grep -c -- ">>> gaffer hotkey" "$file" || true)
+  closes=$(grep -c -- "<<< gaffer hotkey" "$file" || true)
   if (( opens != closes )); then
-    echo "gaffer-ctl: refusing to edit $BIND_FILE — its gaffer hotkey block is not a matched pair ($opens opening, $closes closing)" >&2
+    echo "gaffer-ctl: refusing to edit $file — its gaffer hotkey block is not a matched pair ($opens opening, $closes closing)" >&2
     return 1
   fi
   if (( opens > 1 )); then
-    echo "gaffer-ctl: refusing to edit $BIND_FILE — $opens gaffer hotkey blocks, expected at most one" >&2
+    echo "gaffer-ctl: refusing to edit $file — $opens gaffer hotkey blocks, expected at most one" >&2
     return 1
   fi
   if (( opens == 1 )); then
     local o c
-    o=$(grep -n -- ">>> gaffer hotkey" "$BIND_FILE" | head -1 | cut -d: -f1)
-    c=$(grep -n -- "<<< gaffer hotkey" "$BIND_FILE" | head -1 | cut -d: -f1)
+    o=$(grep -n -- ">>> gaffer hotkey" "$file" | head -1 | cut -d: -f1)
+    c=$(grep -n -- "<<< gaffer hotkey" "$file" | head -1 | cut -d: -f1)
     if (( c < o )); then
-      echo "gaffer-ctl: refusing to edit $BIND_FILE — its gaffer hotkey block closes before it opens" >&2
+      echo "gaffer-ctl: refusing to edit $file — its gaffer hotkey block closes before it opens" >&2
       return 1
     fi
   fi
@@ -72,6 +78,7 @@ check_markers() {
 }
 
 strip_block() {
+  local file="$1"
   # The block is written with a blank line above it, for legibility. That
   # blank is ours, so it has to come out with the block — stripping only the
   # marked lines left one behind on every re-bind, and three hotkey changes
@@ -86,7 +93,7 @@ strip_block() {
     $0 == "" { pending++; next }
     { flush(); print }
     END { flush() }
-  ' "$BIND_FILE"
+  ' "$file"
 }
 
 case "$1" in
@@ -118,8 +125,8 @@ if ! [[ $key =~ $KEY_SHAPE ]]; then
     REAL_BIND=$(resolve_bind_file) || exit 1
     tmp=$(mktemp "$REAL_BIND.XXXXXXXX")
     trap 'rm -f "$tmp"' EXIT
-    check_markers || exit 1
-    strip_block > "$tmp"
+    check_markers "$REAL_BIND" || exit 1
+    strip_block "$REAL_BIND" > "$tmp"
     {
       echo ""
       echo "$MARK_IN"
@@ -136,8 +143,8 @@ if ! [[ $key =~ $KEY_SHAPE ]]; then
     REAL_BIND=$(resolve_bind_file) || exit 1
     tmp=$(mktemp "$REAL_BIND.XXXXXXXX")
     trap 'rm -f "$tmp"' EXIT
-    check_markers || exit 1
-    strip_block > "$tmp"
+    check_markers "$REAL_BIND" || exit 1
+    strip_block "$REAL_BIND" > "$tmp"
     chmod --reference="$REAL_BIND" "$tmp" 2>/dev/null || chmod 644 "$tmp"
     mv -f "$tmp" "$REAL_BIND"
     trap - EXIT
