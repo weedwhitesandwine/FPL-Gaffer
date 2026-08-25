@@ -279,8 +279,29 @@ PY
       pid=$(head -c 64 -- "$lock" 2>/dev/null || true)
     fi
     if [[ $pid =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
-      # Make sure it really is ours before signalling it.
-      if tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q "gafferd.py"; then
+      # Two proofs before signalling anything, because a pid outlives the
+      # process that owned it: this file survives a crash and the number in
+      # it gets handed to something unrelated soon enough. Searching the
+      # command line for "gafferd.py" matched an editor with the file open,
+      # or the shell that launched it, or anything else that merely mentions
+      # the name. So the arguments have to *be* the engine, and the process
+      # has to still hold this lock file open — which only the live daemon
+      # does, and which a recycled pid cannot fake.
+      real=$(readlink -f -- "$lock" 2>/dev/null || true)
+      argv_is_engine=no
+      while IFS= read -r arg; do
+        [[ ${arg##*/} == "gafferd.py" ]] && argv_is_engine=yes
+      done < <(tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null || true)
+      holds_lock=no
+      if [[ $argv_is_engine == yes && -n $real ]]; then
+        for fd in "/proc/$pid/fd"/*; do
+          if [[ $(readlink -- "$fd" 2>/dev/null) == "$real" ]]; then
+            holds_lock=yes
+            break
+          fi
+        done
+      fi
+      if [[ $holds_lock == yes ]]; then
         kill "$pid" 2>/dev/null || true
         echo "Stopped the engine (pid $pid)."
       else

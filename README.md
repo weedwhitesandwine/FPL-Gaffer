@@ -139,11 +139,18 @@ is your team number, which forms the URL of your own public team page. The two
 hosts above are the only ones contacted, and the replies are read, cached on
 your disk and drawn.
 
-Neither feed is trusted to behave. A reply is refused above 8 MB on the wire
-and above 32 MB once unpacked, so neither an oversized response nor a small
-heavily compressed one can exhaust the memory of a process that runs all day;
-an over-sized reply is treated exactly like a failed request, falling back to
-the last good copy on disk. Every piece of text the overlay draws is pinned to
+Neither feed is trusted to behave, and "only these two hosts" is enforced
+rather than intended. Both hosts are checked before the request and again on
+any redirect, so a reply that tries to send Gaffer somewhere else — off HTTPS,
+onto a third host, or at a service on your own machine — is refused instead of
+followed; a name that answers with a loopback, private or otherwise non-public
+address is refused for the same reason. A reply is refused above 8 MB on the
+wire and above 32 MB once unpacked, so neither an oversized response nor a
+small heavily compressed one can exhaust the memory of a process that runs all
+day, and a whole body has 30 seconds to arrive, so a feed that dribbles bytes
+to hold the connection open is dropped rather than waited on. Every one of
+these refusals is treated exactly like a failed request, falling back to the
+last good copy on disk. Every piece of text the overlay draws is pinned to
 plain text, so a name or a news line arriving from either API is displayed as
 the characters it contains and never interpreted as markup.
 
@@ -154,8 +161,16 @@ symlink) in a directory first verified to be owned by the user and writable by
 nobody else, then renamed over the destination in one atomic step. Reads
 refuse symlinks and non-regular files, so a link or FIFO left at one of these
 names by a restored backup cannot redirect a write onto another file or park a
-read forever, and the lock and log files are opened with the same no-follow
-guarantee before anything truncates them.
+read forever. The lock and log files are opened with the same no-follow
+guarantee before anything truncates them, and then checked to be ordinary
+files: refusing a symlink says nothing about a pipe, and writing to a pipe
+nobody is reading would hang the daemon at startup.
+
+Stopping the engine signals only the engine. The recorded process number is
+not taken on trust — a lock file outlives a crash and the number in it is
+handed to something unrelated soon enough — so `stop` requires both that the
+process is running the engine and that it still holds the lock file open,
+which only the live daemon does and a recycled number cannot fake.
 
 **Timer: yes.** The engine polls on an interval, because live scores are the
 purpose. It adapts: roughly once a minute while matches are actually being

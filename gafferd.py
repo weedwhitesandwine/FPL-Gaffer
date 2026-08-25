@@ -17,14 +17,17 @@ should never need a virtualenv.
 
 import errno
 import fcntl
+import ipaddress
 import json
 import os
+import socket
 import stat
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import zlib
 from datetime import datetime, timezone
@@ -36,6 +39,17 @@ API = "https://fantasy.premierleague.com/api"
 # as the request looks like it came from premierleague.com.
 PULSE = "https://footballapi.pulselive.com/football"
 UA = "Mozilla/5.0 (X11; Linux x86_64) Gaffer/1.0 (Omarchy plugin)"
+
+# The only two hosts Gaffer ever talks to. Everything it fetches is a path
+# under one of these, and both are named in the README, so the list is the
+# promise rather than a guess at one.
+ALLOWED_HOSTS = ("fantasy.premierleague.com", "footballapi.pulselive.com")
+
+# A reply that keeps arriving is not the same problem as a reply that is too
+# large, and a socket timeout does not catch it: dribbling one byte at a time
+# keeps the connection busy for as long as the other end likes. This is the
+# wall clock a whole body has to arrive within.
+BODY_DEADLINE = 30
 
 # Settings, cache and logs. This is deliberately NOT inside the plugin
 # folder: Omarchy watches that folder recursively with inotify and reloads
@@ -110,7 +124,16 @@ def log(msg):
         # O_NOFOLLOW: this file gets truncated when it grows, and truncating
         # through a symlink planted at its well-known name would truncate
         # whatever the link points at instead of a log.
-        fd = os.open(LOG_FILE, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        # O_NONBLOCK as well, and then a look at what was actually opened:
+        # O_NOFOLLOW refuses a symlink but says nothing about a FIFO, and
+        # opening one of those for writing waits for a reader that never
+        # comes. Without the flag the daemon stops here; with it the open
+        # fails, and the check below refuses anything that is not a file.
+        fd = os.open(LOG_FILE, os.O_WRONLY | os.O_APPEND | os.O_CREAT
+                     | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            os.close(fd)
+            return
         with os.fdopen(fd, "a") as fh:
             fh.write(line)
             if fh.tell() > 512_000:
@@ -351,10 +374,73 @@ class TooBig(Exception):
     """The other end sent more than we are willing to hold in memory."""
 
 
-def read_capped(resp):
+class UnsafeTarget(urllib.error.URLError):
+    """An address Gaffer will not fetch: not https, not one of the two feeds,
+    or resolving somewhere that is not on the internet. It subclasses the
+    error the callers already expect from a failed fetch, so refusing one
+    falls back to cache exactly as being offline does."""
+
+
+def _refuse_private(host):
+    """A name that answers with a loopback, private or otherwise non-public
+    address is not the Premier League: it is this machine, or something else
+    on this network. Every address the name resolves to has to be public,
+    because the connection may use any of them."""
+    try:
+        infos = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise UnsafeTarget("could not resolve %s (%s)" % (host, exc))
+    for info in infos:
+        addr = ipaddress.ip_address(info[4][0])
+        if addr.is_loopback or addr.is_private or addr.is_link_local \
+                or addr.is_reserved or addr.is_multicast or not addr.is_global:
+            raise UnsafeTarget("%s resolves to %s, which is not on the "
+                               "internet" % (host, addr))
+
+
+def check_target(url):
+    """Every address fetched, whether asked for or arrived at by redirect."""
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme != "https":
+        raise UnsafeTarget("refusing a %s address"
+                           % (parts.scheme or "scheme-less"))
+    host = (parts.hostname or "").lower()
+    if host not in ALLOWED_HOSTS:
+        raise UnsafeTarget("refusing %s: not one of the two declared feeds"
+                           % (host or "an address with no host"))
+    _refuse_private(host)
+
+
+class _DeclaredFeedsOnly(urllib.request.HTTPRedirectHandler):
+    """Left to itself urllib follows a redirect wherever it is pointed — off
+    https, onto another host, or at a service on this machine — on the say-so
+    of whoever controls the reply. A redirect may move within the two feeds
+    Gaffer declares, and nowhere else."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        check_target(newurl)
+        return urllib.request.HTTPRedirectHandler.redirect_request(
+            self, req, fp, code, msg, headers, newurl)
+
+
+OPENER = urllib.request.build_opener(_DeclaredFeedsOnly())
+
+
+def read_capped(resp, deadline=None):
     """Read a response body, refusing anything oversized, and unpack gzip a
     slice at a time so a small reply cannot inflate without limit."""
-    raw = resp.read(MAX_WIRE + 1)
+    raw = bytearray()
+    while len(raw) <= MAX_WIRE:
+        if deadline is not None and time.monotonic() > deadline:
+            # Caught alongside the socket timeout by every caller, so a feed
+            # that trickles falls back to cache like one that never answered.
+            raise TimeoutError("reply still arriving after %d seconds"
+                               % BODY_DEADLINE)
+        chunk = resp.read(min(65536, MAX_WIRE + 1 - len(raw)))
+        if not chunk:
+            break
+        raw += chunk
+    raw = bytes(raw)
     if len(raw) > MAX_WIRE:
         raise TooBig("reply exceeded %d bytes" % MAX_WIRE)
     if resp.headers.get("Content-Encoding") != "gzip":
@@ -389,13 +475,19 @@ def fetch(path, kind, live, force=False):
             if cached is not None:
                 return cached
 
+    url = API + path
     req = urllib.request.Request(
-        API + path,
+        url,
         headers={"User-Agent": UA, "Accept": "application/json", "Accept-Encoding": "gzip"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=25) as resp:
-            data = json.loads(read_capped(resp).decode("utf-8"))
+        # The address asked for is checked as well as any it redirects to:
+        # the constant is right, but the name behind it still has to answer
+        # with a public address rather than something on this machine.
+        check_target(url)
+        deadline = time.monotonic() + BODY_DEADLINE
+        with OPENER.open(req, timeout=25) as resp:
+            data = json.loads(read_capped(resp, deadline).decode("utf-8"))
     except (urllib.error.URLError, ValueError, OSError, TimeoutError,
             zlib.error, TooBig) as exc:
         log("fetch failed %s: %s" % (path, exc))
@@ -419,16 +511,19 @@ def pulse_fetch(path, ttl):
             if cached is not None:
                 return cached
 
+    url = PULSE + path
     req = urllib.request.Request(
-        PULSE + path,
+        url,
         headers={"User-Agent": UA, "Accept": "application/json",
                  "Accept-Encoding": "gzip",
                  "Origin": "https://www.premierleague.com",
                  "Referer": "https://www.premierleague.com/"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.loads(read_capped(resp).decode("utf-8"))
+        check_target(url)
+        deadline = time.monotonic() + BODY_DEADLINE
+        with OPENER.open(req, timeout=20) as resp:
+            data = json.loads(read_capped(resp, deadline).decode("utf-8"))
     except (urllib.error.URLError, ValueError, OSError, TimeoutError,
             zlib.error, TooBig) as exc:
         log("pulse fetch failed %s: %s" % (path, exc))
@@ -1797,12 +1892,22 @@ def single_instance():
     # open(path, "w") both follows a symlink planted at this well-known name
     # and truncates its target before the lock is even attempted.
     try:
-        fd = os.open(LOCK_FILE, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        fd = os.open(LOCK_FILE, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW
+                     | os.O_NONBLOCK, 0o600)
     except OSError as e:
         if e.errno == errno.ELOOP:
             log("refusing lock file that is a symlink: %s" % LOCK_FILE)
             return None
+        if e.errno == errno.ENXIO:
+            log("refusing lock file that is a pipe: %s" % LOCK_FILE)
+            return None
         raise
+    # A restored backup or a planted name can leave something here that is
+    # not a file. Locking it would succeed and mean nothing.
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        log("refusing lock file that is not a regular file: %s" % LOCK_FILE)
+        os.close(fd)
+        return None
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
