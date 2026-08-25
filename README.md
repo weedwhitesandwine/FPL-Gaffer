@@ -23,12 +23,18 @@ Two ways to use it, chosen on first run and changeable in settings:
   Table, Fixtures, Leaders and News. No fantasy team needed, and nothing that
   only means something inside the game.
 
+The Live tab is headed with the gameweek it is showing and what that week is
+doing — nothing kicked off yet, matches in play, or all of it finished. The
+fantasy clock holds a gameweek as current until the next deadline, so when it
+does turn over, the week just watched folds away into a results drawer at the
+foot of the tab rather than disappearing.
+
 | | FPL Gaffer | Premier League Fan |
 | --- | --- | --- |
 | Squad, Leagues, Players | ✓ | — |
 | Live, Table, Fixtures, News | ✓ | ✓ |
 | Podium board | Monsters — goals, defcon, value, cards, referees | Leaders — goals, tackles, blocks, recoveries, cards, referees |
-| API calls per refresh | 22 | 4 |
+| API calls per refresh | 22, or 24 when last week's results refresh | 4 |
 
 ## Install
 

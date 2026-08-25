@@ -988,6 +988,21 @@ def match_detail(fx, players):
     return detail
 
 
+def fixture_row(fx, players):
+    """One match in the shape the screens read it in."""
+    return {
+        "id": fx["id"], "label": fx["_label"], "home": fx["_home"], "away": fx["_away"],
+        "home_name": fx["_home_name"], "away_name": fx["_away_name"],
+        "started": fx.get("started", False), "finished": fx.get("finished_provisional", False),
+        "minutes": fx.get("minutes", 0), "clock": fx.get("_pl_clock"),
+        "referee": fx.get("_referee"),
+        "kickoff": fx.get("kickoff_time"),
+        "hs": fx.get("team_h_score"), "as": fx.get("team_a_score"),
+        "hd": fx.get("team_h_difficulty"), "ad": fx.get("team_a_difficulty"),
+        "detail": match_detail(fx, players) if fx.get("started") else None,
+    }
+
+
 # The monsters board: a podium of three for each of nine ways to be
 # remarkable. Ported from the categories an earlier FPL Gaffer app used,
 # with one substitution — fouls committed are not in the public API, so the
@@ -1222,6 +1237,30 @@ def score_picks(picks_payload, live_stats, prov, players):
         pts = stats.get("total_points", 0) + prov.get(p["element"], 0)
         total += pts * mults.get(p["element"], 1)
     return total - hits, chip
+
+
+def past_squad(entry_id, gw, fixtures, players, teams):
+    """Your own players in a gameweek that is already over.
+
+    The same rows the live squad is built from, so a finished match can still
+    say who of yours was in it. Everything here has stopped moving — the picks
+    locked when the week began and the points settled when it ended — so both
+    feeds are read at the long end of their cache lives rather than fetched
+    again every cycle.
+    """
+    picks = fetch("/entry/%d/event/%d/picks/" % (entry_id, gw), "picks_locked", False)
+    if not picks:
+        return []
+    raw = fetch("/event/%d/live/" % gw, "live", False) or {}
+    stats = {e["id"]: e["stats"] for e in raw.get("elements", [])}
+    by_team = {}
+    for f in fixtures:
+        by_team.setdefault(f["team_h"], []).append(f)
+        by_team.setdefault(f["team_a"], []).append(f)
+    stats["_by_team"] = by_team
+    stats["_gw"] = gw
+    rows, _, _ = squad_view(picks, stats, provisional_bonus(fixtures), players, by_team, teams)
+    return rows
 
 
 def squad_view(picks_payload, live_stats, prov, players, fixtures_by_team, teams):
@@ -1543,17 +1582,8 @@ def refresh(settings, previous):
                                    for c in history.get("chips", [])]
 
     # ---- everything not tied to one manager
-    state["fixtures"] = [{
-        "id": f["id"], "label": f["_label"], "home": f["_home"], "away": f["_away"],
-        "home_name": f["_home_name"], "away_name": f["_away_name"],
-        "started": f.get("started", False), "finished": f.get("finished_provisional", False),
-        "minutes": f.get("minutes", 0), "clock": f.get("_pl_clock"),
-        "referee": f.get("_referee"),
-        "kickoff": f.get("kickoff_time"),
-        "hs": f.get("team_h_score"), "as": f.get("team_a_score"),
-        "hd": f.get("team_h_difficulty"), "ad": f.get("team_a_difficulty"),
-        "detail": match_detail(f, players) if f.get("started") else None,
-    } for f in sorted(gw_fixtures, key=lambda f: f.get("kickoff_time") or "")]
+    state["fixtures"] = [fixture_row(f, players)
+                         for f in sorted(gw_fixtures, key=lambda f: f.get("kickoff_time") or "")]
 
     # Handy for the bar readout in either mode: what's on now, what's next.
     state["live_matches"] = sum(1 for f in gw_fixtures
@@ -1563,6 +1593,32 @@ def refresh(settings, previous):
                       key=lambda f: f["kickoff_time"])
     state["next_kickoff"] = upcoming[0]["kickoff_time"] if upcoming else None
     state["next_match"] = upcoming[0]["_label"] if upcoming else None
+
+    # A gameweek does not stop mattering the moment its last whistle goes. The
+    # fantasy clock holds it as current right through the gap, and when it
+    # finally turns over, the week just watched would otherwise disappear from
+    # the one screen that showed it. It travels alongside the current week
+    # instead, settled, for the live tab to fold away rather than lose.
+    prev_gw, prev_fixtures = None, []
+    for e in sorted(events, key=lambda e: e["id"], reverse=True):
+        if e["id"] >= gw:
+            continue
+        played = [f for f in all_fixtures if f.get("event") == e["id"] and f.get("started")]
+        if played:
+            prev_gw, prev_fixtures = e["id"], played
+            break
+    state["prev_gw"] = prev_gw
+    state["prev_fixtures"] = [fixture_row(f, players)
+                              for f in sorted(prev_fixtures, key=lambda f: f.get("kickoff_time") or "")]
+    # Who of yours played in them is worth having too, but it is a second
+    # helping of a screen that reads perfectly well without it — so it must
+    # never be able to take the refresh down with it.
+    state["prev_squad"] = []
+    if entry_id and prev_gw:
+        try:
+            state["prev_squad"] = past_squad(entry_id, prev_gw, prev_fixtures, players, teams)
+        except Exception as exc:
+            log("last week's squad unavailable, showing the results alone: %s" % exc)
 
     # The grid starts at the gameweek being played, not the one after it. A
     # week with matches still to come is the week you are planning around.
