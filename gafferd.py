@@ -547,7 +547,13 @@ def pulse_index():
     seasons = pulse_fetch("/competitions/1/compseasons", 86400)
     if not seasons or not seasons.get("content"):
         return {}
-    season_id = int(seasons["content"][0]["id"])
+    # The rows below are read defensively one at a time; this was the one
+    # value taken on trust, and a season with a missing or non-numeric id
+    # would raise out of here rather than leave the live feed unavailable.
+    first = seasons["content"][0] if isinstance(seasons["content"], list) else {}
+    season_id = as_int(first.get("id") if isinstance(first, dict) else 0, 0)
+    if not season_id:
+        return {}
 
     listing = pulse_fetch(
         "/fixtures?comps=1&compSeasons=%d&pageSize=100&sort=asc" % season_id, 21600)
@@ -1650,14 +1656,26 @@ def refresh(settings, previous):
             state["overall_rank"] = entry.get("summary_overall_rank")
             state["overall_points"] = entry.get("summary_overall_points")
             state["total_players"] = boot.get("total_players")
-            state["leagues"] = [{
-                "id": l["id"],
-                "name": l["name"],
-                "rank": l.get("entry_rank"),
-                "last_rank": l.get("entry_last_rank"),
-                "size": l.get("rank_count"),
-                "type": l.get("league_type"),
-            } for l in ((entry.get("leagues") or {}).get("classic") or [])]
+            # Skip a malformed row rather than raise through the whole
+            # refresh: the id becomes a URL further on and the name is drawn,
+            # so both have to be the shape they claim. This matches how the
+            # standings rows are read — one bad row costs that row.
+            leagues = []
+            for l in ((entry.get("leagues") or {}).get("classic") or []):
+                if not isinstance(l, dict):
+                    continue
+                league_id = as_int(l.get("id"), 0)
+                if not league_id:
+                    continue
+                leagues.append({
+                    "id": league_id,
+                    "name": str(l.get("name") or "League %d" % league_id),
+                    "rank": l.get("entry_rank"),
+                    "last_rank": l.get("entry_last_rank"),
+                    "size": l.get("rank_count"),
+                    "type": l.get("league_type"),
+                })
+            state["leagues"] = leagues
 
         picks = fetch("/entry/%d/event/%d/picks/" % (entry_id, gw), "picks", live_now)
         if picks:
