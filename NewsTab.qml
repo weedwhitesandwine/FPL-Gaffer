@@ -265,8 +265,8 @@ Item {
             model: tab.mode === "diffs" ? [
               { w: 64, v: Fmt.money(row.modelData.cost) },
               { w: 46, v: row.modelData.pos },
-              { w: 56, v: "form " + row.modelData.form },
-              { w: 66, v: row.modelData.selected + "% own" },
+              { w: 76, v: "form " + row.modelData.form },
+              { w: 92, v: "Owned " + row.modelData.selected + "%" },
               { w: 56, v: row.modelData.points + " pts" },
               { w: 66, v: row.modelData.xgi !== undefined && row.modelData.xgi !== null
                           ? "xGI " + Number(row.modelData.xgi).toFixed(1) : "" }
