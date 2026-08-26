@@ -17,6 +17,7 @@ should never need a virtualenv.
 
 import errno
 import fcntl
+import http.client
 import ipaddress
 import json
 import os
@@ -25,6 +26,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -441,32 +443,63 @@ def read_capped(resp, deadline=None):
     # A checked-between-reads deadline is not enough on its own: a buffered
     # read(n) waits to fill all n bytes, so a peer dripping small chunks
     # inside the idle timeout could hold one read for hours before the check
-    # ran. Two things close that: the socket's timeout is clamped to the time
-    # remaining before every read, so no single wait can outlive the
-    # deadline, and read1() hands back whatever has arrived rather than
-    # waiting for a full slice, so the clamp is re-applied every chunk.
+    # ran. read1() hands back whatever has arrived and the socket timeout is
+    # clamped to the time remaining before every read, but one read1() can
+    # still sit inside chunk-header parsing across repeated receives if the
+    # peer drips framing bytes within the idle timeout. The watchdog makes
+    # the ceiling hard regardless: at the deadline it severs the socket, so
+    # whatever call is in flight comes back with EOF or an error and is
+    # reported as the timeout it really is.
     raw = bytearray()
     sock = _resp_socket(resp) if deadline is not None else None
     idle = sock.gettimeout() if sock is not None else None
-    while len(raw) <= MAX_WIRE:
-        if deadline is not None:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                # Caught alongside the socket timeout by every caller, so a
-                # feed that trickles falls back to cache like one that never
-                # answered.
+    expired = threading.Event()
+    watchdog = None
+    if sock is not None:
+        def _sever():
+            expired.set()
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+        watchdog = threading.Timer(max(0.0, deadline - time.monotonic()),
+                                   _sever)
+        watchdog.daemon = True
+        watchdog.start()
+    try:
+        while len(raw) <= MAX_WIRE:
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or expired.is_set():
+                    # Caught alongside the socket timeout by every caller, so
+                    # a feed that trickles falls back to cache like one that
+                    # never answered.
+                    raise TimeoutError("reply still arriving after %d seconds"
+                                       % BODY_DEADLINE)
+                # fileno goes to -1 once the body is complete and http.client
+                # has closed the connection; nothing can block on the network
+                # then, the remaining reads only drain the buffer.
+                if sock is not None and sock.fileno() >= 0:
+                    sock.settimeout(remaining if idle is None
+                                    else min(idle, remaining))
+            try:
+                chunk = resp.read1(min(65536, MAX_WIRE + 1 - len(raw)))
+            except (OSError, http.client.HTTPException):
+                # The severed socket surfaces as ECONNRESET, a TLS error, or
+                # http.client tripping over truncated chunk framing.
+                if expired.is_set():
+                    raise TimeoutError("reply still arriving after %d seconds"
+                                       % BODY_DEADLINE) from None
+                raise
+            if expired.is_set():
                 raise TimeoutError("reply still arriving after %d seconds"
                                    % BODY_DEADLINE)
-            # fileno goes to -1 once the body is complete and http.client has
-            # closed the connection; nothing can block on the network then,
-            # the remaining reads only drain the buffer.
-            if sock is not None and sock.fileno() >= 0:
-                sock.settimeout(remaining if idle is None
-                                else min(idle, remaining))
-        chunk = resp.read1(min(65536, MAX_WIRE + 1 - len(raw)))
-        if not chunk:
-            break
-        raw += chunk
+            if not chunk:
+                break
+            raw += chunk
+    finally:
+        if watchdog is not None:
+            watchdog.cancel()
     raw = bytes(raw)
     if len(raw) > MAX_WIRE:
         raise TooBig("reply exceeded %d bytes" % MAX_WIRE)
