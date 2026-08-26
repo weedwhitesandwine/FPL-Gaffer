@@ -426,17 +426,44 @@ class _DeclaredFeedsOnly(urllib.request.HTTPRedirectHandler):
 OPENER = urllib.request.build_opener(_DeclaredFeedsOnly())
 
 
+def _resp_socket(resp):
+    """The socket underneath a response, reached through the buffered layers
+    (BufferedReader over SocketIO), so its timeout can be tightened to however
+    long the body has left. None if the layers are not the expected shape."""
+    fp = getattr(resp, "fp", None)
+    raw = getattr(fp, "raw", fp)
+    return getattr(raw, "_sock", None)
+
+
 def read_capped(resp, deadline=None):
     """Read a response body, refusing anything oversized, and unpack gzip a
     slice at a time so a small reply cannot inflate without limit."""
+    # A checked-between-reads deadline is not enough on its own: a buffered
+    # read(n) waits to fill all n bytes, so a peer dripping small chunks
+    # inside the idle timeout could hold one read for hours before the check
+    # ran. Two things close that: the socket's timeout is clamped to the time
+    # remaining before every read, so no single wait can outlive the
+    # deadline, and read1() hands back whatever has arrived rather than
+    # waiting for a full slice, so the clamp is re-applied every chunk.
     raw = bytearray()
+    sock = _resp_socket(resp) if deadline is not None else None
+    idle = sock.gettimeout() if sock is not None else None
     while len(raw) <= MAX_WIRE:
-        if deadline is not None and time.monotonic() > deadline:
-            # Caught alongside the socket timeout by every caller, so a feed
-            # that trickles falls back to cache like one that never answered.
-            raise TimeoutError("reply still arriving after %d seconds"
-                               % BODY_DEADLINE)
-        chunk = resp.read(min(65536, MAX_WIRE + 1 - len(raw)))
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                # Caught alongside the socket timeout by every caller, so a
+                # feed that trickles falls back to cache like one that never
+                # answered.
+                raise TimeoutError("reply still arriving after %d seconds"
+                                   % BODY_DEADLINE)
+            # fileno goes to -1 once the body is complete and http.client has
+            # closed the connection; nothing can block on the network then,
+            # the remaining reads only drain the buffer.
+            if sock is not None and sock.fileno() >= 0:
+                sock.settimeout(remaining if idle is None
+                                else min(idle, remaining))
+        chunk = resp.read1(min(65536, MAX_WIRE + 1 - len(raw)))
         if not chunk:
             break
         raw += chunk
