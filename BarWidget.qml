@@ -90,8 +90,12 @@ Ui.BarWidget {
   property bool flash: false
 
   onBarDataChanged: {
-    var seq = Number(root.barData ? root.barData.event_seq : NaN)
-    if (!isFinite(seq)) return
+    // Tested as a number rather than converted to one: the count is absent —
+    // written as null — on any pass where the engine's notify step failed, and
+    // Number(null) is 0, not NaN. Converting would quietly reset the count to
+    // zero and then flash on the next ordinary reading, for nothing.
+    var seq = root.barData ? root.barData.event_seq : undefined
+    if (typeof seq !== "number" || !isFinite(seq)) return
     // The first reading only establishes where the count is. Flashing on it
     // would mean a flash at every login for a goal scored last Saturday.
     if (root.lastSeq >= 0 && seq > root.lastSeq && root.blinkOnEvents)

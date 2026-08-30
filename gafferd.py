@@ -556,17 +556,23 @@ def read_capped(resp, deadline=None, ceiling=None):
     if resp.headers.get("Content-Encoding") != "gzip":
         return raw
 
+    # A caller that tightened the wire limit meant the reply to be small, not
+    # merely to arrive small: 256 KB of gzip unpacks to tens of megabytes, and
+    # a ceiling that only counted the compressed bytes would let exactly that
+    # through — and then write it to disk as a club badge. The tighter of the
+    # two limits applies to both halves.
+    unpacked_cap = min(ceiling, MAX_UNPACKED) if ceiling < MAX_WIRE else MAX_UNPACKED
     unzip = zlib.decompressobj(16 + zlib.MAX_WBITS)
     out = bytearray()
     pending = raw
     while pending:
-        out += unzip.decompress(pending, MAX_UNPACKED + 1 - len(out))
-        if len(out) > MAX_UNPACKED:
-            raise TooBig("reply unpacked past %d bytes" % MAX_UNPACKED)
+        out += unzip.decompress(pending, unpacked_cap + 1 - len(out))
+        if len(out) > unpacked_cap:
+            raise TooBig("reply unpacked past %d bytes" % unpacked_cap)
         pending = unzip.unconsumed_tail
     out += unzip.flush()
-    if len(out) > MAX_UNPACKED:
-        raise TooBig("reply unpacked past %d bytes" % MAX_UNPACKED)
+    if len(out) > unpacked_cap:
+        raise TooBig("reply unpacked past %d bytes" % unpacked_cap)
     return bytes(out)
 
 
@@ -652,6 +658,16 @@ def pulse_fetch(path, ttl):
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 
+# A crest that cannot be fetched — a 404, a host behind a firewall that drops
+# the connection — must not be asked for again on every cycle for the rest of
+# the season. Twenty of those, each waiting for a timeout, would add minutes to
+# a pass that is supposed to take seconds. A failure is remembered for a few
+# hours and then allowed one more try, which is long enough to stop the loop
+# and short enough that a crest missing this morning appears this evening.
+BADGE_RETRY = 6 * 3600
+BADGE_FAILED = {}
+
+
 def looks_like_png(path):
     """Whether the file already at a badge's name is a PNG at all.
 
@@ -695,6 +711,9 @@ def fetch_badge(code):
     if code <= 0:
         return None
     path = os.path.join(BADGE_DIR, "t%d.png" % code)
+    failed_at = BADGE_FAILED.get(code)
+    if failed_at is not None and time.monotonic() - failed_at < BADGE_RETRY:
+        return None
     if os.path.exists(path):
         if looks_like_png(path):
             return path
@@ -718,23 +737,31 @@ def fetch_badge(code):
     except (urllib.error.URLError, ValueError, OSError, TimeoutError,
             zlib.error, TooBig) as exc:
         log("badge fetch failed t%d: %s" % (code, exc))
+        BADGE_FAILED[code] = time.monotonic()
         return None
 
     if not blob.startswith(PNG_MAGIC):
         log("badge t%d did not arrive as a PNG, discarding it" % code)
+        BADGE_FAILED[code] = time.monotonic()
         return None
     try:
         write_bytes_atomic(path, blob)
     except OSError as exc:
         log("could not store badge t%d: %s" % (code, exc))
+        BADGE_FAILED[code] = time.monotonic()
         return None
+    BADGE_FAILED.pop(code, None)
     return path
 
 
 def badge_paths(teams):
     """Every club's crest on disk, keyed by the three letters the screens
-    already draw. Missing ones are fetched, at most twenty times ever: after
-    the first pass through a season this reads the directory and stops."""
+    already draw.
+
+    A crest is fetched once and then read from the directory forever after, so
+    in the ordinary case this pass makes no requests at all. One that cannot be
+    fetched is not retried for hours, so a league whose crest host is
+    unreachable costs one round of timeouts rather than one every cycle."""
     out = {}
     for team in teams.values():
         short = team.get("short_name")
@@ -937,8 +964,13 @@ def team_sheet(sheet):
         if row:
             lines.append(row)
             placed.update(pid for pid in line if pid in people)
+    # The spare line exists for the odd player the formation forgot, not for
+    # the whole team. With no formation at all every starter would land in it
+    # and the pitch would draw as a single column eleven deep, which is not a
+    # shape — it is a list with grass behind it. Leave the lines empty instead,
+    # and the sheet is refused a few lines further down.
     spare = [p for pid, p in people.items() if pid not in placed]
-    if spare:
+    if spare and lines:
         lines.append(spare)
 
     subs = []
@@ -1000,7 +1032,7 @@ MATCH_STATS = [
 ]
 
 
-def pulse_stats(pl_id, live):
+def pulse_stats(pl_id, live, home_pulse=None):
     """The match's own numbers: possession, shots, corners, fouls.
 
     A separate document from the fixture, and the one place these live — the
@@ -1018,6 +1050,15 @@ def pulse_stats(pl_id, live):
         ids = [str(int(s["team"]["id"])) for s in sides]
     except (KeyError, TypeError, ValueError):
         return None
+    # Which of the two is the home side is a fact we already hold, so it is
+    # checked rather than assumed from the order they arrived in. Read the
+    # wrong way round, every bar in the statistics block is silently mirrored
+    # — the right numbers against the wrong clubs, with nothing to show for it.
+    home_key = str(home_pulse) if home_pulse is not None else None
+    if home_key is not None and home_key in ids:
+        other = [i for i in ids if i != home_key]
+        if len(other) == 1:
+            ids = [home_key, other[0]]
 
     def values(team_key):
         entry = data.get(team_key)
@@ -1085,7 +1126,7 @@ def apply_match_sheets(fixtures, teams):
         if isinstance(detail, dict):
             fx["_sheets"] = pulse_sheets(detail)
         if fx.get("started"):
-            fx["_mstats"] = pulse_stats(pl_id, live)
+            fx["_mstats"] = pulse_stats(pl_id, live, fx.get("_home_pulse"))
 
 
 def referee_records(all_fixtures):
@@ -2037,15 +2078,6 @@ def refresh(settings, previous):
         log("live feed unavailable, using the fantasy clock: %s" % exc)
 
     gw_fixtures = [f for f in all_fixtures if f.get("event") == gw]
-
-    # Who is on the pitch and what the match is doing — the same second source,
-    # and the same rule: it enriches the week's matches and must never be able
-    # to take the refresh down with it.
-    try:
-        apply_match_sheets(gw_fixtures, teams)
-    except Exception as exc:
-        log("no team sheets this gameweek: %s" % exc)
-
     live_raw = fetch("/event/%d/live/" % gw, "live", live_now) or {}
     live_stats = {e["id"]: e["stats"] for e in live_raw.get("elements", [])}
 
@@ -2058,6 +2090,20 @@ def refresh(settings, previous):
         by_team.setdefault(f["team_a"], []).append(f)
     live_stats["_by_team"] = by_team
     live_stats["_gw"] = gw
+
+    # Who is on the pitch and what the match has looked like — the same second
+    # source, and the same rule: it enriches the week's matches and must never
+    # be able to take the refresh down with it.
+    #
+    # It runs here, after the feeds the screen is actually for, on purpose. It
+    # is one more request per match in play, and a Saturday afternoon has six
+    # of them; put ahead of the live scores, one pulselive session refusing to
+    # answer would hold up the points and the goal alerts for the whole of the
+    # window they exist for.
+    try:
+        apply_match_sheets(gw_fixtures, teams)
+    except Exception as exc:
+        log("no team sheets this gameweek: %s" % exc)
 
     prov = provisional_bonus(gw_fixtures)
     status = fetch("/event-status/", "status", live_now) or {}
@@ -2401,14 +2447,19 @@ def cycle(previous):
     state = refresh(settings, previous)
     if not state:
         return previous, False
-    # The notify pass runs first because it is what counts the match events,
-    # and the bar file carries that count: written the other way round, the
-    # icon would learn about a goal one cycle after the desktop did.
+    # The state file is written before anything is announced. A write that
+    # fails throws out of here, so the next pass reads the old state back as
+    # `previous` — and anything already announced against the new one would be
+    # announced again, every cycle, until the disk came back. Notifications go
+    # out only once the pass they describe is safely on disk.
+    write_atomic(STATE_FILE, state)
+    # The notify pass counts the match events, and the bar file carries that
+    # count, so the bar is written after it: the other way round and the icon
+    # would learn about a goal a cycle later than the desktop did.
     try:
         raise_notices(state, previous, settings)
     except Exception as exc:                                    # never die on a toast
         log("notify pass failed: %s" % exc)
-    write_atomic(STATE_FILE, state)
     write_bar(state)
     return state, True
 
