@@ -115,7 +115,7 @@ those three is missing, that one feature is what stops working.
 | Path | When |
 | --- | --- |
 | its own plugin folder | never, after `omarchy plugin add` clones it |
-| `~/.local/state/gaffer/` — settings, state, cache, log | continuously, while running |
+| `~/.local/state/gaffer/` — settings, state, cache, crests, log | continuously, while running |
 | `~/.config/hypr/bindings.lua` | **only if you set a hotkey**, and only inside its own marked block, leaving every other line untouched |
 | `~/.config/omarchy/shell.json` | **only if you turn the bar readout on or off**. It adds, moves or removes its own entry and leaves every other setting as it found it, though the file is rewritten as standard JSON with two-space indentation. Where a dotfiles manager has symlinked this path into its own repository, the link is resolved and the real file written, so the link survives |
 
@@ -123,12 +123,15 @@ Those last two are the only files outside its own directory it will ever
 touch, and neither is written unless you change that specific setting —
 finishing the first-run greeter does not rewrite either of them.
 
-The only files it ever deletes are its own cached API responses, in
-`~/.local/state/gaffer/cache/`: on each cycle the engine drops anything older
-than three days, and then the oldest first while that folder is over 64 MB, so
-a cache cannot grow without limit on a machine left running for months.
-`gaffer-ctl.sh clear-cache` empties the same folder in one go. Nothing outside
-it is ever removed.
+Everything it deletes is something it wrote itself, inside its own directory.
+Its cached API responses, in `~/.local/state/gaffer/cache/`: on each cycle the
+engine drops anything older than three days, and then the oldest first while
+that folder is over 64 MB, so a cache cannot grow without limit on a machine
+left running for months. `gaffer-ctl.sh clear-cache` empties the same folder in
+one go. And in `~/.local/state/gaffer/badges/`, two small cases: a file at a
+crest's name that turns out not to be a PNG is removed and fetched again, and
+the empty marker recording that a crest could not be fetched is removed once it
+can. Nothing outside that directory is ever removed.
 
 **Privileges.** Every process in the table runs as your own user, with the
 permissions your session already has. `setpriv` is in that list for one
@@ -154,8 +157,11 @@ unauthenticated and read-only:
   club, twenty in total, fetched once and then read from your own disk
   forever. The address is built from the club's own number, which arrives as a
   number in the fantasy feed and is used as one, so no value from any reply
-  can steer where this fetches from. A crest is refused above 256 KB and
-  discarded unless the bytes that arrive actually start like a PNG.
+  can steer where this fetches from. A crest is refused above 256 KB —
+  compressed or unpacked, so a small reply cannot inflate past it — and
+  discarded unless the bytes that arrive actually start like a PNG. One that
+  cannot be fetched is not asked for again for six hours, so a host that is
+  unreachable costs one round of timeouts rather than one every cycle.
 
 Every request is a GET, and the only value of yours that ever appears in one
 is your team number, which forms the URL of your own public team page. The
@@ -258,7 +264,7 @@ somebody else, you have copied the wrong number.
 | `~/.local/state/gaffer/bar.json` | the small slice the bar icon reads |
 | `~/.local/state/gaffer/settings.json` | your choices |
 | `~/.local/state/gaffer/cache/` | raw API responses |
-| `~/.local/state/gaffer/badges/` | the twenty club crests, as PNGs |
+| `~/.local/state/gaffer/badges/` | the twenty club crests, as PNGs, plus an empty marker for any that could not be fetched |
 | `~/.local/state/gaffer/gafferd.log` | engine log |
 
 `gaffer-ctl.sh stop` stops the background engine, and

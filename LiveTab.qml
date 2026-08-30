@@ -33,6 +33,12 @@ Item {
   // back the way it was left.
   property var opened: ({})
   function isOpen(id) { return tab.opened[id] === true }
+  // Whether a match has anything to unfold. Asked by the strip that offers it,
+  // by the loader that builds it and by Enter on the row — one answer, so a
+  // match can never offer a sheet the loader declines to build.
+  function hasSheet(fixture) {
+    return !!(fixture && (fixture.lineups || fixture.mstats))
+  }
   function toggleSheet(id) {
     var next = {}
     for (var k in tab.opened) next[k] = tab.opened[k]
@@ -109,8 +115,7 @@ Item {
     var r = tab.rows[index]
     if (!r) return
     if (r.kind === "fold") tab.showPast = !tab.showPast
-    else if (r.fixture && (r.fixture.lineups || r.fixture.mstats))
-      tab.toggleSheet(r.fixture.id)
+    else if (tab.hasSheet(r.fixture)) tab.toggleSheet(r.fixture.id)
   }
 
   // ------------------------------------------------------------ the heading
@@ -646,7 +651,7 @@ Item {
             Item {
               width: parent.width
               height: visible ? sheetStrip.implicitHeight + Style.spacing.sm : 0
-              visible: !!(card.fx.lineups || card.fx.mstats)
+              visible: tab.hasSheet(card.fx)
 
               Rectangle {
                 anchors.top: parent.top
@@ -682,8 +687,7 @@ Item {
             Loader {
               width: parent.width
               height: active && item ? item.implicitHeight : 0
-              active: tab.isOpen(card.fx.id)
-                      && !!(card.fx.lineups || card.fx.mstats)
+              active: tab.isOpen(card.fx.id) && tab.hasSheet(card.fx)
               visible: active
               sourceComponent: sheetComponent
             }

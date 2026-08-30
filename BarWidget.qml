@@ -215,10 +215,8 @@ Ui.BarWidget {
   // numbers without opening anything, which is the whole gesture for "is that
   // score right?" while you are looking at the bar.
   function press(b) {
-    if (!GafferState.overlay) return
-    if (b === Qt.MiddleButton) { root.refreshNow(); return }
-    if (GafferState.overlay.opened) GafferState.overlay.dismiss()
-    else GafferState.overlay.openAt(root.anchorCenterX())
+    if (b === Qt.MiddleButton) root.refreshNow()
+    else root.toggle()
   }
 
   Ui.BarIconButton {

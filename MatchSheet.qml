@@ -29,38 +29,28 @@ Item {
   implicitHeight: body.implicitHeight
   height: implicitHeight
 
-  // Every player on the pitch as one flat list, each carrying where on the
-  // grass to draw them: which half, how far up it, and how far across their
-  // own line. Positions are fractions rather than pixels so the pitch can be
-  // any width the card happens to be.
-  // The most players any one line holds, which is what decides how tall the
-  // pitch has to be: a back five needs five chips stacked without touching.
-  readonly property int widestLine: {
-    var most = 1
-    if (!sheet.lineups) return most
-    var sides = [sheet.lineups.home, sheet.lineups.away]
-    for (var s = 0; s < sides.length; s++) {
-      var lines = sides[s] && sides[s].lines ? sides[s].lines : []
-      for (var i = 0; i < lines.length; i++)
-        most = Math.max(most, (lines[i] || []).length)
-    }
-    return most
-  }
-
-  readonly property var spots: {
-    var out = []
+  // Both sides walked once: every player on the pitch as one flat list, each
+  // carrying where on the grass to draw them — which half, how far up it, and
+  // how far across their own line — and, alongside, the most anyone's line
+  // holds, which is what decides how tall the pitch has to be. A back five
+  // needs five chips stacked without touching.
+  //
+  // Positions are fractions rather than pixels, so the pitch can be any width
+  // the card happens to be.
+  readonly property var pitchPlan: {
+    var out = { spots: [], widest: 1 }
     if (!sheet.lineups) return out
     var sides = [["home", sheet.lineups.home], ["away", sheet.lineups.away]]
     for (var s = 0; s < sides.length; s++) {
-      var which = sides[s][0]
       var side = sides[s][1]
       var lines = side && side.lines ? side.lines : []
       for (var i = 0; i < lines.length; i++) {
         var line = lines[i] || []
+        out.widest = Math.max(out.widest, line.length)
         for (var j = 0; j < line.length; j++) {
-          out.push({
+          out.spots.push({
             player: line[j],
-            home: which === "home",
+            home: sides[s][0] === "home",
             depth: (i + 0.5) / lines.length,
             across: (j + 0.5) / line.length
           })
@@ -114,7 +104,7 @@ Item {
     Rectangle {
       id: pitch
       width: parent.width
-      height: visible ? Math.max(Style.space(200), sheet.widestLine * Style.space(46)) : 0
+      height: visible ? Math.max(Style.space(200), sheet.pitchPlan.widest * Style.space(46)) : 0
       visible: !!sheet.lineups
       radius: app ? app.cornerRadius : 0
       color: app ? app.turf : "#0a3a20"
@@ -177,7 +167,7 @@ Item {
       }
 
       Repeater {
-        model: sheet.spots
+        model: sheet.pitchPlan.spots
 
         delegate: Item {
           id: spot
@@ -316,8 +306,7 @@ Item {
           width: parent.width
           height: label.implicitHeight + Style.space(9)
 
-          function reading(v) {
-            var n = Number(v) || 0
+          function reading(n) {
             var text = (Math.round(n * 10) / 10).toString()
             return modelData.pct ? text + "%" : text
           }
@@ -326,7 +315,7 @@ Item {
             textFormat: Text.PlainText
             anchors.left: parent.left
             anchors.top: parent.top
-            text: parent.reading(modelData.h)
+            text: statRow.reading(statRow.home)
             color: sheet.fg
             font.family: app ? app.fontFamily : "monospace"
             font.pixelSize: Style.font.caption
@@ -348,7 +337,7 @@ Item {
             textFormat: Text.PlainText
             anchors.right: parent.right
             anchors.top: parent.top
-            text: parent.reading(modelData.a)
+            text: statRow.reading(statRow.away)
             color: sheet.fg
             font.family: app ? app.fontFamily : "monospace"
             font.pixelSize: Style.font.caption
