@@ -36,7 +36,10 @@ Item {
   // Column widths live here once. The heading row and the data rows both
   // read them, which is the only reliable way to keep a table lined up.
   readonly property int wPos:   Style.space(30)
-  readonly property int wClub:  Style.space(172)
+  // The crest takes its width out of the club column rather than adding to
+  // the row, so every column to the right of it stays where it was.
+  readonly property int wCrest: Style.space(20)
+  readonly property int wClub:  Style.space(172) - wCrest - colGap
   readonly property int wStat:  Style.space(34)
   readonly property int wPts:   Style.space(42)
   readonly property int wForm:  Style.space(78)
@@ -72,6 +75,7 @@ Item {
 
         Text { textFormat: Text.PlainText; width: tab.wPos; text: "#"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
+        Item { width: tab.wCrest; height: 1 }
         Text { textFormat: Text.PlainText; width: tab.wClub; text: "CLUB"; color: app ? app.fainter : "#888"
                font.family: app ? app.fontFamily : "monospace"; font.pixelSize: Style.font.caption }
         Repeater {
@@ -156,6 +160,17 @@ Item {
             color: app ? app.dim : "#aaa"
             font.family: app ? app.fontFamily : "monospace"
             font.pixelSize: Style.font.bodySmall
+          }
+
+          Item {
+            width: tab.wCrest
+            height: parent.height
+            ClubBadge {
+              app: tab.app
+              club: modelData.team
+              size: tab.wCrest
+              anchors.centerIn: parent
+            }
           }
 
           Text {

@@ -28,6 +28,18 @@ Item {
   // Folded shut on opening: this week is the reason you came to the screen.
   property bool showPast: false
 
+  // Which matches have their team sheet open, by fixture id. Held on the tab
+  // rather than on the card so a card scrolled out of view and rebuilt comes
+  // back the way it was left.
+  property var opened: ({})
+  function isOpen(id) { return tab.opened[id] === true }
+  function toggleSheet(id) {
+    var next = {}
+    for (var k in tab.opened) next[k] = tab.opened[k]
+    next[id] = !next[id]
+    tab.opened = next
+  }
+
   // What the week is doing, in a few words, so the heading says more than a
   // number: nothing kicked off yet, matches on now, or all of it settled.
   readonly property string standing: {
@@ -91,10 +103,14 @@ Item {
     return out
   }
 
-  // Enter on the fold opens and shuts it, the same as clicking it.
+  // Enter on the fold opens and shuts it, the same as clicking it; Enter on a
+  // match opens its team sheet, which is the same gesture one row down.
   function activate(index) {
     var r = tab.rows[index]
-    if (r && r.kind === "fold") tab.showPast = !tab.showPast
+    if (!r) return
+    if (r.kind === "fold") tab.showPast = !tab.showPast
+    else if (r.fixture && (r.fixture.lineups || r.fixture.mstats))
+      tab.toggleSheet(r.fixture.id)
   }
 
   // ------------------------------------------------------------ the heading
@@ -326,12 +342,39 @@ Item {
               // same gutter is left empty on the left: without it the scoreline
               // centres on what is left of the row and reads visibly off-centre.
               readonly property int gutter: Style.space(150)
+              // The crests stand between each club's name and the score, so the
+              // names give up exactly the room the badges take rather than the
+              // scoreline shifting to make space for them.
+              readonly property int crest: Style.space(22)
+              // A gap either side of the crest: hard against the club name it
+              // reads as part of the word.
+              readonly property int crestInset: Style.space(60) + Style.spacing.sm
+              readonly property int nameInset: crestInset + crest + Style.spacing.sm
               readonly property int sideWidth: (width - Style.space(120) - gutter * 2) / 2
+                                               - crest - Style.spacing.sm * 2
+
+              ClubBadge {                                       // home crest
+                app: tab.app
+                club: card.fx.home
+                size: parent.crest
+                anchors.right: parent.horizontalCenter
+                anchors.rightMargin: parent.crestInset
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              ClubBadge {                                       // away crest
+                app: tab.app
+                club: card.fx.away
+                size: parent.crest
+                anchors.left: parent.horizontalCenter
+                anchors.leftMargin: parent.crestInset
+                anchors.verticalCenter: parent.verticalCenter
+              }
 
               Text {                                            // home club
                 textFormat: Text.PlainText
                 anchors.right: parent.horizontalCenter
-                anchors.rightMargin: Style.space(60)
+                anchors.rightMargin: parent.nameInset
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.sideWidth
                 horizontalAlignment: Text.AlignRight
@@ -360,7 +403,7 @@ Item {
               Text {                                            // away club
                 textFormat: Text.PlainText
                 anchors.left: parent.horizontalCenter
-                anchors.leftMargin: Style.space(60)
+                anchors.leftMargin: parent.nameInset
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.sideWidth
                 text: card.fx.away_name || card.fx.away
@@ -594,6 +637,66 @@ Item {
                   }
                 }
               }
+            }
+
+            // --------------------------------------------- the team sheet
+            // Shut by default. The card is a scoreline and what happened in
+            // it; who is standing where is a second question, and a screen
+            // that answers it for ten matches at once answers nothing.
+            Item {
+              width: parent.width
+              height: visible ? sheetStrip.implicitHeight + Style.spacing.sm : 0
+              visible: !!(card.fx.lineups || card.fx.mstats)
+
+              Rectangle {
+                anchors.top: parent.top
+                width: parent.width
+                height: 1
+                color: app ? app.hairline : "#333"
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                id: sheetStrip
+                anchors.top: parent.top
+                anchors.topMargin: Style.spacing.sm
+                text: (tab.isOpen(card.fx.id) ? "▾  " : "▸  ")
+                      + (card.fx.lineups ? "Line-ups" : "")
+                      + (card.fx.lineups && card.fx.mstats ? " and " : "")
+                      + (card.fx.mstats ? "match statistics" : "")
+                color: app ? app.fainter : "#888"
+                font.family: app ? app.fontFamily : "monospace"
+                font.pixelSize: Style.font.caption
+              }
+
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  if (app) app.selectedIndex = slot.index
+                  tab.toggleSheet(card.fx.id)
+                }
+              }
+            }
+
+            Loader {
+              width: parent.width
+              height: active && item ? item.implicitHeight : 0
+              active: tab.isOpen(card.fx.id)
+                      && !!(card.fx.lineups || card.fx.mstats)
+              visible: active
+              sourceComponent: sheetComponent
+            }
+          }
+
+          // Built only for the card that is open: a pitch is two dozen items,
+          // and ten of them behind folds nobody has touched is a screen's
+          // worth of work done for nothing.
+          Component {
+            id: sheetComponent
+            MatchSheet {
+              app: tab.app
+              fx: card.fx
             }
           }
         }

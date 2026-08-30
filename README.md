@@ -29,12 +29,26 @@ fantasy clock holds a gameweek as current until the next deadline, so when it
 does turn over, the week just watched folds away into a results drawer at the
 foot of the tab rather than disappearing.
 
+Every match card opens. Underneath the scoreline, `Enter` or a click on the
+strip at its foot unfolds the team sheets drawn as a pitch — the shape the
+league itself published, home attacking left to right and away right to left,
+with shirt numbers, the captain's armband and both benches — and the match's
+own numbers under that: possession, shots, shots on target, corners, fouls,
+offsides, saves and pass accuracy, each as a bar split between the two sides.
+The sides appear about an hour before kick-off, when the league names them.
+
+Club crests appear beside the scoreline and down the league table. They are
+downloaded once each and kept on your own disk; the screens never fetch an
+image while you are looking at them.
+
 | | FPL Gaffer | Premier League Fan |
 | --- | --- | --- |
 | Squad, Leagues, Players | ✓ | — |
 | Live, Table, Fixtures, News | ✓ | ✓ |
+| Line-ups, match statistics, crests | ✓ | ✓ |
 | Podium board | Monsters — goals, defcon, value, cards, referees | Leaders — goals, tackles, blocks, recoveries, cards, referees |
 | API calls per refresh | 22, or 24 when last week's results refresh | 4 |
+| …plus, in both modes | one more per match in play, for its statistics; the team sheets and the finished matches' numbers are held for a day, and the twenty crests are fetched once ever | |
 
 ## Install
 
@@ -122,7 +136,7 @@ reason — `--pdeathsig TERM`, which ties the engine's life to the shell's. It
 changes no user, grants no capability and drops none. The overlay and the bar
 readout both draw inside the shell's own Quickshell process.
 
-**Network: yes, and this is the point of it.** Two hosts, plain HTTPS GET,
+**Network: yes, and this is the point of it.** Three hosts, plain HTTPS GET,
 unauthenticated and read-only:
 
 - `fantasy.premierleague.com` — the game's own public API, for everything the
@@ -132,14 +146,23 @@ unauthenticated and read-only:
   itself: the match clock, live scores, goals, bookings and the referee. The
   fantasy API runs two to four minutes behind the match on all of these and
   publishes bookings late or not at all, so where the league reports something
-  directly, its version is used. Only matches actually in play are looked up.
+  directly, its version is used. Only matches actually in play are looked up
+  for the clock and the score. The same feed carries the team sheets and the
+  match statistics, which are asked for from about an hour before kick-off and
+  held for a day once the match is over.
+- `resources.premierleague.com` — club crests, and nothing else. One PNG per
+  club, twenty in total, fetched once and then read from your own disk
+  forever. The address is built from the club's own number, which arrives as a
+  number in the fantasy feed and is used as one, so no value from any reply
+  can steer where this fetches from. A crest is refused above 256 KB and
+  discarded unless the bytes that arrive actually start like a PNG.
 
 Every request is a GET, and the only value of yours that ever appears in one
-is your team number, which forms the URL of your own public team page. The two
-hosts above are the only ones contacted, and the replies are read, cached on
-your disk and drawn.
+is your team number, which forms the URL of your own public team page. The
+three hosts above are the only ones contacted, and the replies are read,
+cached on your disk and drawn.
 
-Neither feed is trusted to behave, and "only these two hosts" is enforced
+No feed is trusted to behave, and "only these three hosts" is enforced
 rather than intended. Both hosts are checked before the request and again on
 any redirect, so a reply that tries to send Gaffer somewhere else — off HTTPS,
 onto a third host, or at a service on your own machine — is refused instead of
@@ -201,7 +224,8 @@ Standard library Python only — no virtualenv, no build step.
 | `Tab` / `←` `→` | move between tabs |
 | `↑` `↓` / `PgUp` `PgDn` | move the selection |
 | type | filter the current tab |
-| `Enter` | act on the selection (stars a player on the watchlist) |
+| `Enter` | act on the selection (stars a player on the watchlist; on the Live tab, unfolds a match's line-ups and statistics) |
+| middle-click the bar icon | refresh now, without opening anything |
 | double-click a player | show him on the Players tab, selected and scrolled to |
 | click a column heading | rank by it; click again to reverse |
 | `Ctrl+,` | settings |
@@ -234,13 +258,32 @@ somebody else, you have copied the wrong number.
 | `~/.local/state/gaffer/bar.json` | the small slice the bar icon reads |
 | `~/.local/state/gaffer/settings.json` | your choices |
 | `~/.local/state/gaffer/cache/` | raw API responses |
+| `~/.local/state/gaffer/badges/` | the twenty club crests, as PNGs |
 | `~/.local/state/gaffer/gafferd.log` | engine log |
 
 `gaffer-ctl.sh stop` stops the background engine, and
 `gaffer-ctl.sh clear-cache` forgets every cached response. The engine also
 prunes that cache folder as it runs — entries older than three days, and the
 oldest first while it is over 64 MB — which is the only deleting the plugin
-does.
+does. The crests sit outside that folder on purpose: they are about 150 KB in
+total for the whole league and a club badge does not go stale, so sweeping
+them by age would mean fetching the same twenty files again every three days.
+
+## The bar icon
+
+Just the ball. Your points, rank, captain, what is still to play and the time
+to the next deadline are all in the tooltip, so a glance at the clock is not
+also a score you did not ask for.
+
+It flashes in the theme's accent colour for a couple of seconds whenever
+Gaffer has just told you something about the football — a goal, a red card, a
+kick-off, full time. It follows your notification settings: the icon flashes
+for the things you have asked to be told about and stays still for the rest,
+so turning a notification off turns its flash off too. The flash itself can be
+switched off in the bar's own settings for this widget, alongside where the
+icon sits.
+
+Middle-clicking the icon refreshes without opening anything.
 
 ## The Monsters board
 
@@ -259,10 +302,13 @@ explanatory; three are worth a note:
 
 Everything comes from the Fantasy Premier League's own public API at
 `fantasy.premierleague.com/api`. It needs no key and no login. The match-day detail the fantasy API does not
-publish — the referee, the attendance and the match clock — comes from the
+publish — the referee, the attendance, the match clock, the team sheets and
+the match statistics — comes from the
 Premier League's own feed at `footballapi.pulselive.com`;
-if that feed is unavailable the referee category goes quiet and nothing else
-notices.
+if that feed is unavailable the referee category goes quiet, the line-ups and
+statistics stay folded away, and nothing else notices. The club crests come
+from `resources.premierleague.com`, once each; without them the screens show
+the club names alone, which is what they showed before.
 
 Price-change predictions are not calculated here. The game publishes its own
 projection per player, new for 2026/27, and the plugin reads it. It is shown

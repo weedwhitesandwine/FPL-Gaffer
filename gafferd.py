@@ -40,12 +40,18 @@ API = "https://fantasy.premierleague.com/api"
 # score, goals, bookings and the referee. It answers a plain client as long
 # as the request looks like it came from premierleague.com.
 PULSE = "https://footballapi.pulselive.com/football"
+# Club badges, and nothing else. The number in the path is the club's Opta
+# id, which the fantasy feed publishes as each team's `code` — so the whole
+# address is built from a number this process already holds, and never from
+# anything a reply said. Fetched once per club and kept on disk afterwards.
+BADGE = "https://resources.premierleague.com/premierleague/badges/70/t%d.png"
 UA = "Mozilla/5.0 (X11; Linux x86_64) Gaffer/1.0 (Omarchy plugin)"
 
-# The only two hosts Gaffer ever talks to. Everything it fetches is a path
-# under one of these, and both are named in the README, so the list is the
-# promise rather than a guess at one.
-ALLOWED_HOSTS = ("fantasy.premierleague.com", "footballapi.pulselive.com")
+# The only three hosts Gaffer ever talks to. Everything it fetches is a path
+# under one of these, and all three are named in the README, so the list is
+# the promise rather than a guess at one.
+ALLOWED_HOSTS = ("fantasy.premierleague.com", "footballapi.pulselive.com",
+                 "resources.premierleague.com")
 
 # A reply that keeps arriving is not the same problem as a reply that is too
 # large, and a socket timeout does not catch it: dribbling one byte at a time
@@ -65,6 +71,10 @@ def _state_dir():
 
 STATE_DIR = _state_dir()
 CACHE_DIR = os.path.join(STATE_DIR, "cache")
+# Badges are PNGs rather than API replies, and the cache prune sweeps by age:
+# a club crest does not go stale, so it gets its own directory the sweep
+# leaves alone.
+BADGE_DIR = os.path.join(STATE_DIR, "badges")
 STATE_FILE = os.path.join(STATE_DIR, "state.json")
 BAR_FILE = os.path.join(STATE_DIR, "bar.json")
 SETTINGS_FILE = os.path.join(STATE_DIR, "settings.json")
@@ -217,7 +227,8 @@ def ensure_dirs():
     from under a rename."""
     os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
     os.makedirs(CACHE_DIR, mode=0o700, exist_ok=True)
-    for d in (STATE_DIR, CACHE_DIR):
+    os.makedirs(BADGE_DIR, mode=0o700, exist_ok=True)
+    for d in (STATE_DIR, CACHE_DIR, BADGE_DIR):
         st = os.stat(d)
         if st.st_uid != os.getuid() or (st.st_mode & 0o022):
             raise RuntimeError(
@@ -245,6 +256,24 @@ def write_atomic(path, payload):
         raise
 
 
+def write_bytes_atomic(path, blob):
+    """The same staged rename for something that is not JSON. A badge is a
+    file the shell then loads by name, so a half-written one is worse than no
+    badge at all: the image either arrives complete or it never appears."""
+    fd, tmp = tempfile.mkstemp(prefix=".gaffer.", suffix=".tmp",
+                               dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(blob)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 # Ceilings on everything that arrives from outside this process. Nothing either
 # feed publishes comes close to the wire limit: the whole fantasy player
 # database is under two megabytes. Reading without one would let a single
@@ -261,6 +290,9 @@ def write_atomic(path, payload):
 MAX_WIRE = 8 * 1024 * 1024        # bytes accepted over the wire
 MAX_UNPACKED = 32 * 1024 * 1024   # bytes accepted after decompression
 MAX_SETTINGS_BYTES = 64 * 1024
+# A club badge is around eight kilobytes of PNG. A quarter of a megabyte is
+# already far more than one can honestly be, and it is what the read stops at.
+MAX_BADGE_BYTES = 256 * 1024
 MAX_STATE_BYTES = 8 * 1024 * 1024
 MAX_CACHE_BYTES = MAX_WIRE
 # The cache is one file per API path, and mini-league standings mean one file
@@ -344,7 +376,20 @@ def plain(s):
     return str("" if s is None else s).replace("<", "").replace(">", "")
 
 
-def notify(title, body, urgency="normal", icon="applications-games"):
+# How many things have happened on a pitch since this machine started
+# counting. The bar icon watches the number rather than the notifications: a
+# toast can be missed, dismissed, or turned off at the desktop, and the point
+# of the flash is that something happened in a match you are following. Only
+# football moves it — a price change at two in the morning is news, but it is
+# not something to flash an icon about.
+MATCH_PULSES = 0
+
+
+def notify(title, body, urgency="normal", icon="applications-games",
+           pulse=False):
+    if pulse:
+        global MATCH_PULSES
+        MATCH_PULSES += 1
     try:
         subprocess.Popen(
             # `--` matters: a title is a positional argument, and a feed string
@@ -437,9 +482,14 @@ def _resp_socket(resp):
     return getattr(raw, "_sock", None)
 
 
-def read_capped(resp, deadline=None):
+def read_capped(resp, deadline=None, ceiling=None):
     """Read a response body, refusing anything oversized, and unpack gzip a
-    slice at a time so a small reply cannot inflate without limit."""
+    slice at a time so a small reply cannot inflate without limit.
+
+    `ceiling` tightens the wire limit for a caller that knows its reply is
+    small — a club badge is eight kilobytes, and there is no reason to accept
+    eight megabytes of one."""
+    ceiling = MAX_WIRE if ceiling is None else min(ceiling, MAX_WIRE)
     # A checked-between-reads deadline is not enough on its own: a buffered
     # read(n) waits to fill all n bytes, so a peer dripping small chunks
     # inside the idle timeout could hold one read for hours before the check
@@ -467,7 +517,7 @@ def read_capped(resp, deadline=None):
         watchdog.daemon = True
         watchdog.start()
     try:
-        while len(raw) <= MAX_WIRE:
+        while len(raw) <= ceiling:
             if deadline is not None:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0 or expired.is_set():
@@ -483,7 +533,7 @@ def read_capped(resp, deadline=None):
                     sock.settimeout(remaining if idle is None
                                     else min(idle, remaining))
             try:
-                chunk = resp.read1(min(65536, MAX_WIRE + 1 - len(raw)))
+                chunk = resp.read1(min(65536, ceiling + 1 - len(raw)))
             except (OSError, http.client.HTTPException):
                 # The severed socket surfaces as ECONNRESET, a TLS error, or
                 # http.client tripping over truncated chunk framing.
@@ -501,8 +551,8 @@ def read_capped(resp, deadline=None):
         if watchdog is not None:
             watchdog.cancel()
     raw = bytes(raw)
-    if len(raw) > MAX_WIRE:
-        raise TooBig("reply exceeded %d bytes" % MAX_WIRE)
+    if len(raw) > ceiling:
+        raise TooBig("reply exceeded %d bytes" % ceiling)
     if resp.headers.get("Content-Encoding") != "gzip":
         return raw
 
@@ -594,6 +644,104 @@ def pulse_fetch(path, ttl):
     except OSError:
         pass
     return data
+
+
+# What a PNG starts with. A reply from the badge host that is not one is not
+# written: the shell would be handed a file it cannot draw, and an image is
+# the one thing here that is never inspected before it is used.
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def looks_like_png(path):
+    """Whether the file already at a badge's name is a PNG at all.
+
+    A crest is written once and then read on every launch by the shell's image
+    loader, which is the one reader here that does no checking of its own. What
+    is on disk months later is not necessarily what was written: a restored
+    backup can leave anything at that name, including a symlink pointing
+    somewhere else, or a FIFO that would park the loader forever. So the file
+    is opened on the same terms as every other read in this plugin — no
+    symlink, regular file, non-blocking — and the eight bytes that identify a
+    PNG are checked before its path is handed on.
+    """
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return False
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return False
+        with os.fdopen(fd, "rb") as fh:
+            fd = None
+            return fh.read(len(PNG_MAGIC)) == PNG_MAGIC
+    except OSError:
+        return False
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
+def fetch_badge(code):
+    """One club crest, downloaded once and kept. Returns its path, or None.
+
+    The address is built from an integer — the club's Opta id, which arrives
+    as a number in the fantasy feed and is used as a number here — so there is
+    no path for a value from a reply to steer where this fetches from or what
+    it writes over."""
+    try:
+        code = int(code)
+    except (TypeError, ValueError):
+        return None
+    if code <= 0:
+        return None
+    path = os.path.join(BADGE_DIR, "t%d.png" % code)
+    if os.path.exists(path):
+        if looks_like_png(path):
+            return path
+        # Something is at that name that is not a crest. Take it out of the
+        # way and fetch the real one rather than handing the shell a file to
+        # open.
+        log("%s is not a PNG, replacing it" % path)
+        try:
+            os.unlink(path)
+        except OSError:
+            return None
+
+    url = BADGE % code
+    req = urllib.request.Request(url, headers={"User-Agent": UA,
+                                               "Accept": "image/png"})
+    try:
+        check_target(url)
+        deadline = time.monotonic() + BODY_DEADLINE
+        with OPENER.open(req, timeout=20) as resp:
+            blob = read_capped(resp, deadline, ceiling=MAX_BADGE_BYTES)
+    except (urllib.error.URLError, ValueError, OSError, TimeoutError,
+            zlib.error, TooBig) as exc:
+        log("badge fetch failed t%d: %s" % (code, exc))
+        return None
+
+    if not blob.startswith(PNG_MAGIC):
+        log("badge t%d did not arrive as a PNG, discarding it" % code)
+        return None
+    try:
+        write_bytes_atomic(path, blob)
+    except OSError as exc:
+        log("could not store badge t%d: %s" % (code, exc))
+        return None
+    return path
+
+
+def badge_paths(teams):
+    """Every club's crest on disk, keyed by the three letters the screens
+    already draw. Missing ones are fetched, at most twenty times ever: after
+    the first pass through a season this reads the directory and stops."""
+    out = {}
+    for team in teams.values():
+        short = team.get("short_name")
+        path = fetch_badge(team.get("code"))
+        if short and path:
+            out[short] = path
+    return out
 
 
 def pulse_index():
@@ -741,6 +889,203 @@ def apply_live_feed(fixtures, teams):
         fx["_referee"] = pl.get("referee")
         fx["_pl_clock"] = "HT" if pl.get("phase") == "H" else (
             pl["clock"] + "'" if pl.get("clock") else None)
+
+
+# ------------------------------------------------------- sheets and numbers
+
+# How many people one side of a football match can be. Eleven start and nine
+# sit down, so this is generous by half — but it is a list from somewhere else
+# being written into a file this process reads back every cycle, and a length
+# nobody bounded is how a feed having a bad day becomes a state file too large
+# to read at all. Everything above the cap is dropped, and a sheet that has
+# been cut short simply draws short.
+SHEET_CAP = 30
+
+
+def team_sheet(sheet):
+    """One side's eleven, in the shape it stands in on the grass.
+
+    The league publishes the shape twice over: a `formation` label everyone
+    recognises, and the same thing as lines of player ids running from the
+    goalkeeper forward. The second is what makes a pitch drawable rather than
+    a list — so the ids are turned back into people here, and anything the
+    formation does not account for is added as a last line rather than
+    dropped, because a player left off the pitch is a worse answer than a
+    shape that looks slightly wrong.
+    """
+    people = {}
+    for person in (sheet.get("lineup") or [])[:SHEET_CAP]:
+        if not isinstance(person, dict):
+            continue
+        name = person.get("name") or {}
+        info = person.get("info") or {}
+        people[person.get("id")] = {
+            "n": as_int(person.get("matchShirtNumber")
+                        or info.get("shirtNum") or 0, 0),
+            "name": name.get("last") or name.get("display") or "",
+            "full": name.get("display") or "",
+            "pos": person.get("matchPosition") or info.get("position") or "",
+            "c": person.get("captain") is True,
+        }
+
+    lines, placed = [], set()
+    formation = sheet.get("formation") or {}
+    for line in (formation.get("players") or [])[:SHEET_CAP]:
+        if not isinstance(line, list):
+            continue
+        row = [people[pid] for pid in line[:SHEET_CAP] if pid in people]
+        if row:
+            lines.append(row)
+            placed.update(pid for pid in line if pid in people)
+    spare = [p for pid, p in people.items() if pid not in placed]
+    if spare:
+        lines.append(spare)
+
+    subs = []
+    for person in (sheet.get("substitutes") or [])[:SHEET_CAP]:
+        if not isinstance(person, dict):
+            continue
+        name = person.get("name") or {}
+        info = person.get("info") or {}
+        subs.append({
+            "n": as_int(person.get("matchShirtNumber")
+                        or info.get("shirtNum") or 0, 0),
+            "name": name.get("last") or name.get("display") or "",
+            "pos": person.get("matchPosition") or info.get("position") or "",
+        })
+
+    return {"formation": (formation.get("label") or ""),
+            "lines": lines, "subs": subs}
+
+
+def pulse_sheets(detail):
+    """Both team sheets from a fixture document, home first.
+
+    Returns None until the sides are named, which the league does about an
+    hour before kick-off — an empty pitch drawn for a match nobody has picked
+    a team for yet says less than not drawing one.
+    """
+    sides = detail.get("teams") or []
+    sheets = detail.get("teamLists") or []
+    if len(sides) != 2 or len(sheets) != 2:
+        return None
+    try:
+        home_id = int(sides[0]["team"]["id"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    by_team = {}
+    for sheet in sheets:
+        if not isinstance(sheet, dict):
+            continue
+        by_team[as_int(sheet.get("teamId"), -1)] = team_sheet(sheet)
+    home = by_team.get(home_id)
+    away = next((s for tid, s in by_team.items() if tid != home_id), None)
+    if not home or not away or not home["lines"] or not away["lines"]:
+        return None
+    return {"home": home, "away": away}
+
+
+# The numbers worth putting on a screen, out of the hundred and sixty-six the
+# league keeps. Each is the feed's own name for it, the label to draw, and
+# whether it is a percentage — which decides both the suffix and whether the
+# two sides are expected to add up to a hundred.
+MATCH_STATS = [
+    ("possession_percentage", "Possession", True),
+    ("total_scoring_att", "Shots", False),
+    ("ontarget_scoring_att", "On target", False),
+    ("won_corners", "Corners", False),
+    ("fk_foul_lost", "Fouls", False),
+    ("total_offside", "Offsides", False),
+    ("saves", "Saves", False),
+]
+
+
+def pulse_stats(pl_id, live):
+    """The match's own numbers: possession, shots, corners, fouls.
+
+    A separate document from the fixture, and the one place these live — the
+    fantasy feed has nothing like them. Cached hard once the match is over,
+    because a finished match's numbers are final.
+    """
+    stats = pulse_fetch("/stats/match/%d" % pl_id, 45 if live else 86400)
+    if not isinstance(stats, dict):
+        return None
+    sides = ((stats.get("entity") or {}).get("teams") or [])
+    data = stats.get("data")
+    if len(sides) != 2 or not isinstance(data, dict):
+        return None
+    try:
+        ids = [str(int(s["team"]["id"])) for s in sides]
+    except (KeyError, TypeError, ValueError):
+        return None
+
+    def values(team_key):
+        entry = data.get(team_key)
+        rows = (entry or {}).get("M") if isinstance(entry, dict) else None
+        out = {}
+        for row in rows or []:
+            if isinstance(row, dict) and isinstance(row.get("name"), str):
+                out[row["name"]] = as_float(row.get("value"))
+        return out
+
+    home, away = values(ids[0]), values(ids[1])
+    if not home and not away:
+        return None
+
+    rows = []
+    for name, label, pct in MATCH_STATS:
+        h, a = home.get(name), away.get(name)
+        if h is None and a is None:
+            continue
+        rows.append({"label": label, "h": h or 0.0, "a": a or 0.0, "pct": pct})
+
+    # Passing is two numbers everywhere else and one number here: what people
+    # mean by pass accuracy is the share that found a team-mate.
+    def accuracy(side):
+        total = side.get("total_pass") or 0
+        return round(100.0 * (side.get("accurate_pass") or 0) / total, 1) \
+            if total else None
+    ha, aa = accuracy(home), accuracy(away)
+    if ha is not None or aa is not None:
+        rows.append({"label": "Pass accuracy", "h": ha or 0.0, "a": aa or 0.0,
+                     "pct": True})
+    return rows or None
+
+
+def apply_match_sheets(fixtures, teams):
+    """Team sheets and match statistics for the gameweek's matches.
+
+    Held to the gameweek on purpose: these are two more documents per match,
+    and nobody is looking at the line-ups from a Tuesday in November. A match
+    is worth asking about once the sides are likely to be named — an hour
+    before kick-off — and stops being worth asking about after it is over,
+    which the cache handles by holding a finished match's answer for a day.
+    """
+    index = None
+    for fx in fixtures:
+        kick = parse_ts(fx.get("kickoff_time"))
+        soon = kick is not None and (kick - now()).total_seconds() < 5400
+        if not (fx.get("started") or soon):
+            continue
+        if index is None:
+            index = pulse_index()
+            if not index:
+                return
+        fx["_home_pulse"] = teams.get(fx["team_h"], {}).get("pulse_id")
+        fx["_away_pulse"] = teams.get(fx["team_a"], {}).get("pulse_id")
+        pl_id = index.get((fx.get("_home_pulse"), fx.get("_away_pulse")))
+        if not pl_id:
+            continue
+        live = fx.get("started") and not fx.get("finished_provisional")
+        # A match still to kick off is the one case a long hold gets wrong:
+        # the sides are named while it sits in the cache, and the answer held
+        # is the one from before they were.
+        ttl = 45 if live else (86400 if fx.get("started") else 300)
+        detail = pulse_fetch("/fixtures/%d" % pl_id, ttl)
+        if isinstance(detail, dict):
+            fx["_sheets"] = pulse_sheets(detail)
+        if fx.get("started"):
+            fx["_mstats"] = pulse_stats(pl_id, live)
 
 
 def referee_records(all_fixtures):
@@ -1169,6 +1514,10 @@ def fixture_row(fx, players):
         "hs": fx.get("team_h_score"), "as": fx.get("team_a_score"),
         "hd": fx.get("team_h_difficulty"), "ad": fx.get("team_a_difficulty"),
         "detail": match_detail(fx, players) if fx.get("started") else None,
+        # Both absent until the league names the sides and the match is under
+        # way; the screen draws neither section rather than an empty one.
+        "lineups": fx.get("_sheets"),
+        "mstats": fx.get("_mstats"),
     }
 
 
@@ -1517,6 +1866,8 @@ def squad_view(picks_payload, live_stats, prov, players, fixtures_by_team, teams
 # ------------------------------------------------------------------- notices
 
 def raise_notices(state, previous, settings):
+    global MATCH_PULSES
+    MATCH_PULSES = 0
     seen = read_json(SEEN_FILE, {}, MAX_SETTINGS_BYTES)
     if not isinstance(seen, dict):
         seen = {}
@@ -1531,12 +1882,14 @@ def raise_notices(state, previous, settings):
                 continue
             if row["goals"] > old["goals"]:
                 notify("⚽ %s scores" % row["name"],
-                       "%s — %s. Now on %d points." % (row["fixture"], row["when"], row["applied"]))
+                       "%s — %s. Now on %d points." % (row["fixture"], row["when"], row["applied"]),
+                       pulse=True)
             if row["assists"] > old["assists"]:
                 notify("🅰 %s assists" % row["name"],
-                       "%s — %s. Now on %d points." % (row["fixture"], row["when"], row["applied"]))
+                       "%s — %s. Now on %d points." % (row["fixture"], row["when"], row["applied"]),
+                       pulse=True)
             if row["red"] > old["red"]:
-                notify("🟥 %s sent off" % row["name"], row["fixture"])
+                notify("🟥 %s sent off" % row["name"], row["fixture"], pulse=True)
 
     # Live scores from every match, for people following the football rather
     # than a fantasy team. Compares this pass's scoreline against the last.
@@ -1568,9 +1921,9 @@ def raise_notices(state, previous, settings):
                 # minute that nobody watching the match would recognise.
                 when = fx.get("clock") or "%d'" % (fx.get("minutes") or 0)
                 notify("⚽ %s" % fx["label"],
-                       (scorer + " · " if scorer else "") + when)
+                       (scorer + " · " if scorer else "") + when, pulse=True)
             elif old.get("finished") is False and fx.get("finished"):
-                notify("Full time — %s" % fx["label"], "")
+                notify("Full time — %s" % fx["label"], "", pulse=True)
 
     if wants.get("kickoff"):
         before_kick = {f["id"]: f for f in (previous or {}).get("fixtures", [])}
@@ -1586,7 +1939,7 @@ def raise_notices(state, previous, settings):
             # as told without being announced.
             was = before_kick.get(fx["id"])
             if was is not None and not was.get("started"):
-                notify("Kick off — %s" % fx["label"], "")
+                notify("Kick off — %s" % fx["label"], "", pulse=True)
 
     if wants.get("news"):
         for pid, row in squad.items():
@@ -1644,6 +1997,13 @@ def raise_notices(state, previous, settings):
     today = now().date().isoformat()
     seen = {k: v for k, v in seen.items()
             if not k.startswith("price-") or k[6:16] >= today}
+
+    # The running count of match events, kept beside the ledger of what has
+    # already been said so it survives a restart. It only ever goes up: the
+    # bar icon flashes on the number changing, and a counter that reset would
+    # flash the whole session's football at whoever logged back in.
+    seen["event_seq"] = as_int(seen.get("event_seq"), 0) + MATCH_PULSES
+    state["event_seq"] = seen["event_seq"]
     write_atomic(SEEN_FILE, seen)
 
 
@@ -1677,6 +2037,15 @@ def refresh(settings, previous):
         log("live feed unavailable, using the fantasy clock: %s" % exc)
 
     gw_fixtures = [f for f in all_fixtures if f.get("event") == gw]
+
+    # Who is on the pitch and what the match is doing — the same second source,
+    # and the same rule: it enriches the week's matches and must never be able
+    # to take the refresh down with it.
+    try:
+        apply_match_sheets(gw_fixtures, teams)
+    except Exception as exc:
+        log("no team sheets this gameweek: %s" % exc)
+
     live_raw = fetch("/event/%d/live/" % gw, "live", live_now) or {}
     live_stats = {e["id"]: e["stats"] for e in live_raw.get("elements", [])}
 
@@ -1786,6 +2155,15 @@ def refresh(settings, previous):
     state["next_kickoff"] = upcoming[0]["kickoff_time"] if upcoming else None
     state["next_match"] = upcoming[0]["_label"] if upcoming else None
 
+    # Club crests, as paths to files already on this machine. The screens
+    # never fetch an image themselves: whatever a badge turns out to be, it
+    # arrives here, capped, checked for being a PNG at all, and written whole.
+    try:
+        state["badges"] = badge_paths(teams)
+    except Exception as exc:
+        log("badges unavailable, using club initials: %s" % exc)
+        state["badges"] = {}
+
     # A gameweek does not stop mattering the moment its last whistle goes. The
     # fantasy clock holds it as current right through the gap, and when it
     # finally turns over, the week just watched would otherwise disappear from
@@ -1800,6 +2178,13 @@ def refresh(settings, previous):
             prev_gw, prev_fixtures = e["id"], played
             break
     state["prev_gw"] = prev_gw
+    # Last week's sheets and numbers too, so the drawer is the same screen as
+    # the week above it rather than a poorer version of it. A finished match
+    # is asked about once and held for a day.
+    try:
+        apply_match_sheets(prev_fixtures, teams)
+    except Exception as exc:
+        log("no team sheets for gameweek %s: %s" % (prev_gw, exc))
     state["prev_fixtures"] = [fixture_row(f, players)
                               for f in sorted(prev_fixtures, key=lambda f: f.get("kickoff_time") or "")]
     # Who of yours played in them is worth having too, but it is a second
@@ -1933,6 +2318,10 @@ def write_bar(state):
                         if state.get("deadline_in") else None),
         "chip": state.get("chip"),
         "provisional": not state.get("bonus_added") and state.get("live_now"),
+        # Goals, cards, kick-offs and full time, counted. The icon flashes when
+        # it moves; it never goes backwards, so a missed write is a missed
+        # flash rather than a permanently confused one.
+        "event_seq": state.get("event_seq"),
     }
     write_atomic(BAR_FILE, bar)
 
@@ -2012,12 +2401,15 @@ def cycle(previous):
     state = refresh(settings, previous)
     if not state:
         return previous, False
-    write_atomic(STATE_FILE, state)
-    write_bar(state)
+    # The notify pass runs first because it is what counts the match events,
+    # and the bar file carries that count: written the other way round, the
+    # icon would learn about a goal one cycle after the desktop did.
     try:
         raise_notices(state, previous, settings)
     except Exception as exc:                                    # never die on a toast
         log("notify pass failed: %s" % exc)
+    write_atomic(STATE_FILE, state)
+    write_bar(state)
     return state, True
 
 

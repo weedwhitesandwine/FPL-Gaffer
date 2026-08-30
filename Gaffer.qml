@@ -344,6 +344,20 @@ Item {
     root.filterText = ""
   }
 
+  // Tabbing from one bar popout to another. The bar keeps one popout open at
+  // a time and asks the outgoing one to stand down; Gaffer takes an exclusive
+  // keyboard grab while it is up, so without this it would sit over the clock
+  // or the weather and swallow every key meant for them. The flag marks the
+  // close as a handover rather than a dismissal, for anything that wants to
+  // skip the usual fade.
+  property bool popoutSwitchClosing: false
+
+  function closeForPopoutSwitch() {
+    root.popoutSwitchClosing = true
+    root.dismiss()
+    Qt.callLater(function() { root.popoutSwitchClosing = false })
+  }
+
   function toggle() { if (root.opened) root.dismiss(); else root.openAt(-1) }
 
   property real anchorX: -1

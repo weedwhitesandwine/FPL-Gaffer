@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.weedwhitesandwine.gaffer",
   "name": "FPL Gaffer",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "author": "weedwhitesandwine",
   "license": "MIT",
   "description": "The ultimate dashboard for Premier League fans \u2014 FPL mode for players and Fan mode for everyone else",
@@ -20,6 +20,15 @@
     "description": "Live Fantasy Premier League score, or the countdown to the next deadline",
     "category": "Information",
     "allowMultiple": false,
-    "defaultSection": "right"
+    "defaultSection": "right",
+    "schema": [
+      {
+        "key": "blinkOnEvents",
+        "type": "boolean",
+        "label": "Flash the icon when something happens in a match",
+        "description": "Follows the notification settings: the icon flashes when Gaffer has told you about a goal, a card, a kick-off or full time.",
+        "defaultValue": true
+      }
+    ]
   }
 }

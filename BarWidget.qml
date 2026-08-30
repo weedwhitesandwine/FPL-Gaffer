@@ -75,6 +75,39 @@ Ui.BarWidget {
 
   readonly property bool statto: root.barData && root.barData.mode === "statto"
 
+  // ---------------------------------------------------------------- settings
+  // The flash is the bar icon's own business, so it lives in the widget's
+  // shell.json entry rather than in the engine's settings file: one thing
+  // writes each, and the bar's own settings panel can turn it off.
+  readonly property bool blinkOnEvents: root.setting("blinkOnEvents", true) !== false
+
+  // ------------------------------------------------------------------- flash
+  // The engine counts the things it has told you about the football. When the
+  // count moves, something happened in a match, and the icon says so for a
+  // couple of seconds — a glance at the bar, rather than a toast you have to
+  // still be at the machine to catch.
+  property int lastSeq: -1
+  property bool flash: false
+
+  onBarDataChanged: {
+    var seq = Number(root.barData ? root.barData.event_seq : NaN)
+    if (!isFinite(seq)) return
+    // The first reading only establishes where the count is. Flashing on it
+    // would mean a flash at every login for a goal scored last Saturday.
+    if (root.lastSeq >= 0 && seq > root.lastSeq && root.blinkOnEvents)
+      eventFlash.restart()
+    root.lastSeq = seq
+  }
+
+  SequentialAnimation {
+    id: eventFlash
+    loops: 3
+    PropertyAction { target: root; property: "flash"; value: true }
+    PauseAnimation { duration: 320 }
+    PropertyAction { target: root; property: "flash"; value: false }
+    PauseAnimation { duration: 320 }
+  }
+
   // Just the ball. A bar icon should say "this is here", not report a score
   // you did not ask to see every time you glance at the clock. Points, rank,
   // deadline and what is in play all live in the tooltip.
@@ -92,6 +125,32 @@ Ui.BarWidget {
     if (!GafferState.overlay) return
     if (GafferState.overlay.opened) root.close()
     else root.open()
+  }
+
+  // ------------------------------------------------------------ popout order
+  // The bar holds one popout open at a time and asks the outgoing one to close
+  // when another opens. Gaffer is a layer of its own rather than one of the
+  // bar's popup cards, so it has to say when it is up: without this it stays
+  // over the clock or the weather with an exclusive keyboard grab, and their
+  // keys go nowhere.
+  //
+  // The token registered is the overlay itself, not this widget. There is one
+  // overlay and one widget per monitor, and if each screen registered itself
+  // the second would be told to close the first — which is the same overlay.
+  readonly property var popoutToken: GafferState.overlay
+  function closeForPopoutSwitch() {
+    if (GafferState.overlay) GafferState.overlay.closeForPopoutSwitch()
+  }
+
+  onOpenedChanged: {
+    if (!root.bar || !root.popoutToken) return
+    if (root.opened) root.bar.requestPopout(root.popoutToken)
+    else if (root.bar.activePopout === root.popoutToken)
+      root.bar.releasePopout(root.popoutToken)
+  }
+
+  function refreshNow() {
+    if (GafferState.overlay) GafferState.overlay.refreshNow()
   }
 
   readonly property string stateDir: {
@@ -148,11 +207,23 @@ Ui.BarWidget {
   // Everything the overlay draws itself is pinned to plain text at source.
   function plain(s) { return String(s).replace(/[<>]/g, "") }
 
+  // Left button opens the dashboard; middle button asks the engine for fresh
+  // numbers without opening anything, which is the whole gesture for "is that
+  // score right?" while you are looking at the bar.
+  function press(b) {
+    if (!GafferState.overlay) return
+    if (b === Qt.MiddleButton) { root.refreshNow(); return }
+    if (GafferState.overlay.opened) GafferState.overlay.dismiss()
+    else GafferState.overlay.openAt(root.anchorCenterX())
+  }
+
   Ui.BarIconButton {
     id: button
     anchors.fill: parent
     bar: root.bar
     text: "\uF1E3"
+    active: root.flash
+    activeColor: Color.accent
     tooltipText: {
       if (!root.barData || root.barData.gw === undefined) return "FPL Gaffer"
       if (root.statto) {
@@ -170,10 +241,6 @@ Ui.BarWidget {
       if (root.deadlineLeft > 0) bits.push("Deadline in " + Fmt.countdown(root.deadlineLeft))
       return root.plain(bits.join("\n"))
     }
-    onPressed: function(b) {
-      if (!GafferState.overlay) return
-      if (GafferState.overlay.opened) GafferState.overlay.dismiss()
-      else GafferState.overlay.openAt(root.anchorCenterX())
-    }
+    onPressed: function(b) { root.press(b) }
   }
 }

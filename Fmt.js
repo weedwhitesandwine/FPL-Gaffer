@@ -76,6 +76,16 @@ function movement(now, before) {
   return before - now      // positive means climbed
 }
 
+// A path on this machine, as a URL an Image can load. Every segment is
+// escaped: a home directory with a space or a hash in it is ordinary, and
+// pasting a raw path after "file://" produces a URL that silently fails to
+// load rather than an error anyone would see.
+function fileUrl(path) {
+  var p = String(path || "")
+  if (!p || p.charAt(0) !== "/") return ""
+  return "file://" + p.split("/").map(encodeURIComponent).join("/")
+}
+
 function matches(haystack, needle) {
   var q = String(needle || "").trim()
   if (!q) return true
