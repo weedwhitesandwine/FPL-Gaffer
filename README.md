@@ -265,9 +265,12 @@ if that feed is unavailable the referee category goes quiet and nothing else
 notices.
 
 Price-change predictions are not calculated here. The game publishes its own
-projection per player, new for 2026/27, and the plugin reads it: below 20% is
-ignored, 20% and up is listed with a progress bar, and 95% and up raises a
-notification. It is not a
+projection per player, new for 2026/27, and the plugin reads it. It is shown
+as two lists: your own fifteen always, whatever their progress, and the rest
+of the market once a player passes 20%, sorted by how close the move is and
+marked with a 🔍 where you have added them to your watchlist. The 95%
+notification is raised for exactly two groups: the players in your own team,
+and the ones carrying a magnifying glass. It is not a
 documented or supported product, so it is treated gently: responses are
 cached, polling backs off when nothing is happening, and the plugin never
 hammers it.

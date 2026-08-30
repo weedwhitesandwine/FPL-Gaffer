@@ -6,6 +6,10 @@ import "Fmt.js" as Fmt
 // whose price is about to move, and who's in form but barely owned. Players
 // you own float to the top of every list. Enter stars a player so their news
 // and price moves reach you as desktop notifications.
+//
+// Prices come in two lists rather than one. Your own fifteen are a standing
+// concern and are always shown; the rest of the market only appears once a
+// player is genuinely on the move, with a 🔍 against the ones you watch.
 Item {
   id: tab
   property var app: null
@@ -19,8 +23,13 @@ Item {
   readonly property var modes: statto
     ? [ { id: "news", label: "Injuries & team news" } ]
     : [ { id: "news",   label: "Injuries & news" },
-        { id: "prices", label: "Price watch" },
+        { id: "prices", label: "Price watch (my team)" },
+        { id: "pricesOther", label: "Price watch (others)" },
         { id: "diffs",  label: "Differentials" } ]
+
+  // Both price lists share every column, so the row asks this rather than
+  // naming the two modes at each of the five places it needs to know.
+  readonly property bool pricing: mode === "prices" || mode === "pricesOther"
 
   onStattoChanged: if (statto) tab.mode = "news"
 
@@ -33,10 +42,12 @@ Item {
         if (!Fmt.matches(n.name, q) && !Fmt.matches(n.team, q) && !Fmt.matches(n.news, q)) continue
         out.push(n)
       }
-    } else if (mode === "prices") {
+    } else if (pricing) {
+      var mine = mode === "prices"
       var pw = st.price_watch || []
       for (var j = 0; j < pw.length; j++) {
         var p = pw[j]
+        if (!!p.owned !== mine) continue
         if (!Fmt.matches(p.name, q) && !Fmt.matches(p.team, q)) continue
         out.push(p)
       }
@@ -99,7 +110,9 @@ Item {
       text: tab.mode === "news"
               ? "Sorted with your own players first, then by how widely owned they are."
             : tab.mode === "prices"
-              ? "How far each player has travelled toward a price change tonight, from the game's own projection."
+              ? "Your fifteen, and how far each has travelled toward a price change tonight, from the game's own projection."
+            : tab.mode === "pricesOther"
+              ? "Everyone else on the move tonight. 🔍 marks your watchlist — Enter adds or removes, and only those players and your own raise a price alert."
               : "In form, available, and owned by under 8% of managers."
       color: app ? app.fainter : "#888"
       font.family: app ? app.fontFamily : "monospace"
@@ -169,9 +182,11 @@ Item {
             }
             Text {
               textFormat: Text.PlainText
+              // On the price lists the watchlist reads as a magnifying glass:
+              // a star there would compete with the row's own ownership tint.
               visible: row.watched
               anchors.verticalCenter: parent.verticalCenter
-              text: "★"
+              text: tab.pricing ? "🔍" : "★"
               color: app ? app.accent : "#fff"
               font.family: app ? app.fontFamily : "monospace"
               font.pixelSize: Style.font.caption
@@ -212,7 +227,7 @@ Item {
           // --- price watch: a bar showing how close the move is
           Text {
             textFormat: Text.PlainText
-            visible: tab.mode === "prices"
+            visible: tab.pricing
             width: Style.space(64)
             anchors.verticalCenter: parent.verticalCenter
             text: Fmt.money(row.modelData.cost)
@@ -222,7 +237,7 @@ Item {
           }
           Text {
             textFormat: Text.PlainText
-            visible: tab.mode === "prices"
+            visible: tab.pricing
             width: Style.space(58)
             anchors.verticalCenter: parent.verticalCenter
             text: row.modelData.direction === "up" ? "rising" : "falling"
@@ -233,7 +248,7 @@ Item {
             font.bold: true
           }
           Rectangle {
-            visible: tab.mode === "prices"
+            visible: tab.pricing
             width: Math.max(Style.space(60), parent.width - Style.space(400))
             height: Style.space(9)
             anchors.verticalCenter: parent.verticalCenter
@@ -250,7 +265,7 @@ Item {
           }
           Text {
             textFormat: Text.PlainText
-            visible: tab.mode === "prices"
+            visible: tab.pricing
             width: Style.space(50)
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignRight
@@ -289,8 +304,14 @@ Item {
         textFormat: Text.PlainText
         anchors.centerIn: parent
         visible: tab.rows.length === 0
-        text: tab.mode === "prices"
-                ? "Nothing is close to a price change right now."
+        // A filter that matches nothing is not the same as an empty list, and
+        // the per-list wording would read as a fault when it is only a search.
+        text: tab.q !== ""
+                ? "Nothing matches that."
+              : tab.mode === "prices"
+                ? "No prices for your squad yet — connect your team in settings."
+              : tab.mode === "pricesOther"
+                ? "Nobody else is close to a price change right now."
               : tab.mode === "diffs"
                 ? "No differentials yet — too early in the season for form to mean much."
                 : "No news matches that."

@@ -1603,6 +1603,11 @@ def raise_notices(state, previous, settings):
 
     if wants.get("prices"):
         for row in state.get("price_watch", []):
+            # The list covers the whole market now; the notifications must not.
+            # Only your own players and the ones you have chosen to watch are
+            # worth a desktop alert at midnight.
+            if not (row.get("owned") or row.get("watched")):
+                continue
             # Dated: without a day in the key a player could raise one rise
             # and one fall alert for the whole season, because seen.json is
             # never pruned. Prices move nightly.
@@ -1827,22 +1832,23 @@ def refresh(settings, previous):
         all_fixtures, teams, grid_start, int(settings.get("fixtureWeeks") or 6))
 
     owned = {r["id"] for r in state.get("squad", [])}
-    watch = (set(settings.get("watchlist") or []) | owned) if mode == "gaffer" else set()
+    watched = set(settings.get("watchlist") or [])
+    # The whole market, not just the fifteen: a price move you care about is
+    # as often on a player you are about to buy as on one you already have.
+    # Your own are carried whatever their progress, because a screen headed
+    # "my team" that says "nothing here" tells you less than the numbers do.
     price_watch = []
-    for pid in watch:
-        meta = players.get(pid)
-        if not meta:
-            continue
+    for pid, meta in (players.items() if mode == "gaffer" else []):
         pct = meta["price_pct"]
         direction = "up" if pct >= 0 else "down"
         magnitude = abs(pct)
-        if magnitude < 20:
+        if magnitude < 20 and pid not in owned:
             continue
         price_watch.append({
             "id": pid, "name": meta["web_name"], "team": meta["team_short"],
             "cost": meta["cost"], "direction": direction,
             "progress": round(magnitude, 1), "likely": magnitude >= 95,
-            "owned": pid in owned,
+            "owned": pid in owned, "watched": pid in watched,
         })
     price_watch.sort(key=lambda r: -r["progress"])
     state["price_watch"] = price_watch
